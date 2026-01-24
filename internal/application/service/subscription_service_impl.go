@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
@@ -46,13 +47,14 @@ func (s *subscriptionServiceImpl) CreateSubscription(
 	// Cria customer no Stripe se não existir
 	stripeCustomerID := user.StripeCustomerID
 	if stripeCustomerID == "" {
-		stripeCustomerID, err = s.paymentGateway.CreateCustomer(
-			ctx,
-			user.Email,
-			user.Name,
-			map[string]string{"user_id": user.ID},
-		)
+		stripeCustomerID, err = s.paymentGateway.CreateCustomer(ctx, user.Email, user.Name)
 		if err != nil {
+			return nil, err
+		}
+
+		// Atualiza o usuário com o customer ID
+		user.StripeCustomerID = stripeCustomerID
+		if err := s.userRepo.Update(ctx, user); err != nil {
 			return nil, err
 		}
 	}
@@ -65,7 +67,6 @@ func (s *subscriptionServiceImpl) CreateSubscription(
 		ctx,
 		stripeCustomerID,
 		priceID,
-		req.PaymentMethod,
 	)
 	if err != nil {
 		return nil, domain.ErrPaymentFailed
@@ -127,6 +128,22 @@ func (s *subscriptionServiceImpl) CheckSubscriptionStatus(ctx context.Context, u
 	}
 
 	return subscription.IsActive(), nil
+}
+
+func (s *subscriptionServiceImpl) CreateCheckoutSession(ctx context.Context, req inbound.CreateCheckoutRequest) (string, error) {
+	// Validar que o usuário existe
+	user, err := s.userRepo.GetByID(ctx, req.UserID)
+	if err != nil {
+		return "", domain.ErrUserNotFound
+	}
+
+	// Criar checkout session no Stripe
+	checkoutURL, err := s.paymentGateway.CreateCheckoutSession(ctx, user.ID, user.Email, req.PriceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create checkout session: %w", err)
+	}
+
+	return checkoutURL, nil
 }
 
 func (s *subscriptionServiceImpl) getPriceIDForPlan(plan domain.SubscriptionPlan) string {

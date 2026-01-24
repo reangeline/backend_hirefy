@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "AWS Region"
+  description = "AWS region"
   type        = string
   default     = "us-east-1"
 }
@@ -7,19 +7,25 @@ variable "aws_region" {
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "dev"
+  default     = "prod"
 }
 
 variable "app_name" {
   description = "Application name"
   type        = string
-  default     = "resume-optimizer"
+  default     = "applywise"
 }
 
 variable "dynamodb_table_name" {
   description = "DynamoDB table name"
   type        = string
-  default     = "resume-optimizer-dev"
+  default     = "applywise-prod"
+}
+
+variable "openai_api_key" {
+  description = "OpenAI API Key"
+  type        = string
+  sensitive   = true
 }
 
 variable "stripe_secret_key" {
@@ -30,24 +36,6 @@ variable "stripe_secret_key" {
 
 variable "stripe_webhook_secret" {
   description = "Stripe Webhook Secret"
-  type        = string
-  sensitive   = true
-}
-
-variable "openai_api_key" {
-  description = "OpenAI API Key"
-  type        = string
-  sensitive   = true
-}
-
-variable "stripe_free_price_id" {
-  description = "Stripe Free Plan Price ID"
-  type        = string
-  sensitive   = true
-}
-
-variable "stripe_pro_price_id" {
-  description = "Stripe Pro Plan Price ID"
   type        = string
   sensitive   = true
 }

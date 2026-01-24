@@ -80,6 +80,7 @@ func NewRouter(
 
 			r.Get("/subscription", subscriptionHandler.GetSubscription)
 			r.Post("/subscription", subscriptionHandler.CreateSubscription)
+			r.Post("/subscription/checkout", subscriptionHandler.CreateCheckout) // ← ADICIONAR
 			r.Delete("/subscription", subscriptionHandler.CancelSubscription)
 		})
 	})

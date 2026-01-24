@@ -54,3 +54,11 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+
+# Terraform secrets
+terraform/environments/*/secrets.tfvars
+terraform/environments/*/*.tfvars
+!terraform/environments/*/terraform.tfvars
+!terraform/environments/*/secrets.tfvars.example
+
+stripe-config.env

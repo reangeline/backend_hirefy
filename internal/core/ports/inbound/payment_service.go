@@ -8,10 +8,11 @@ type CreatePaymentMethodRequest struct {
 }
 
 type CreateCheckoutSessionRequest struct {
-	UserID     string
+	UserID     string // ← Adicionar
+	Email      string // ← Adicionar
 	Plan       string
-	SuccessURL string
-	CancelURL  string
+	SuccessURL string // ← Pode remover ou manter para flexibilidade futura
+	CancelURL  string // ← Pode remover ou manter para flexibilidade futura
 }
 
 // PaymentService define os casos de uso de pagamentos

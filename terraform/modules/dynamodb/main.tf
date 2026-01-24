@@ -48,8 +48,11 @@ resource "aws_dynamodb_table" "main" {
     projection_type = "ALL"
   }
 
-  point_in_time_recovery {
-    enabled = true
+  dynamic "point_in_time_recovery" {
+    for_each = var.environment == "prod" ? [1] : []
+    content {
+      enabled = true
+    }
   }
 
   tags = {

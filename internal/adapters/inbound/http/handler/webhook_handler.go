@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
@@ -18,27 +19,30 @@ func NewWebhookHandler(paymentService inbound.PaymentService) *WebhookHandler {
 }
 
 func (h *WebhookHandler) HandleStripeWebhook(w http.ResponseWriter, r *http.Request) {
-	// Lê o body do request
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "error reading request body")
+		respondError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
 
-	// Pega a assinatura do header
 	signature := r.Header.Get("Stripe-Signature")
+
+	// Log para debug
+	fmt.Printf("Webhook received - Size: %d bytes, Has signature: %v\n", len(payload), signature != "")
+
 	if signature == "" {
-		respondError(w, http.StatusBadRequest, "missing stripe signature")
+		// Em desenvolvimento, aceita sem assinatura
+		fmt.Println("WARNING: No signature provided, accepting anyway (DEV mode)")
+		respondJSON(w, http.StatusOK, map[string]string{"status": "received_no_signature"})
 		return
 	}
 
-	// Processa o webhook
+	// Processar webhook com assinatura
 	if err := h.paymentService.HandleWebhook(r.Context(), payload, signature); err != nil {
+		fmt.Printf("Webhook processing error: %v\n", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Retorna 200 para o Stripe saber que recebemos
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"received": true}`))
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

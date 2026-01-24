@@ -15,13 +15,11 @@ provider "aws" {
   default_tags {
     tags = {
       Environment = var.environment
-      Project     = "apply-wise"
+      Project     = "applywise"
       ManagedBy   = "terraform"
     }
   }
 }
-
-
 
 # DynamoDB Table
 module "dynamodb" {
@@ -44,7 +42,7 @@ module "lambda" {
   source = "../../modules/lambda"
 
   environment           = var.environment
-  function_name         = "${var.app_name}-api-${var.environment}"  # ← Adicionar sufixo
+  function_name         = "${var.app_name}-api"
   handler              = "bootstrap"
   runtime              = "provided.al2"
   source_file          = "../../../deployment.zip"
@@ -55,8 +53,6 @@ module "lambda" {
     COGNITO_CLIENT_ID       = module.cognito.client_id
     STRIPE_SECRET_KEY       = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET   = var.stripe_webhook_secret
-    STRIPE_FREE_PRICE_ID    = var.stripe_free_price_id
-    STRIPE_PRO_PRICE_ID     = var.stripe_pro_price_id   
     OPENAI_API_KEY          = var.openai_api_key
   }
 
@@ -75,18 +71,17 @@ module "api_gateway" {
   lambda_invoke_arn  = module.lambda.invoke_arn
 }
 
-# S3 for Resume Storage (optional)
+# S3 for Resume Storage
 module "s3" {
   source = "../../modules/s3"
 
   environment = var.environment
-  bucket_name = "applywise-resumes-dev-reangeline"  # ← Nome único fixo
+  bucket_name = "${var.app_name}-resumes-${var.environment}-prod"
 }
-
 
 module "budget" {
   source = "../../modules/budget"
   
   environment = var.environment
-  alert_email = "reangelinel@hotmail.com"
+  alert_email = "reangelinel@hotmail.com"  # ← Seu email
 }

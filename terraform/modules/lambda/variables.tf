@@ -1,10 +1,15 @@
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
 variable "function_name" {
-  description = "Name of the Lambda function"
+  description = "Lambda function name"
   type        = string
 }
 
 variable "handler" {
-  description = "Lambda function handler"
+  description = "Lambda handler"
   type        = string
 }
 
@@ -14,27 +19,22 @@ variable "runtime" {
 }
 
 variable "source_file" {
-  description = "Path to the deployment package"
+  description = "Path to deployment package"
   type        = string
 }
 
 variable "environment_variables" {
-  description = "Environment variables for Lambda"
+  description = "Environment variables"
   type        = map(string)
   default     = {}
 }
 
 variable "dynamodb_table_arn" {
-  description = "ARN of the DynamoDB table"
+  description = "DynamoDB table ARN"
   type        = string
 }
 
 variable "cognito_pool_arn" {
-  description = "ARN of the Cognito User Pool"
-  type        = string
-}
-
-variable "environment" {
-  description = "Environment name"
+  description = "Cognito user pool ARN"
   type        = string
 }

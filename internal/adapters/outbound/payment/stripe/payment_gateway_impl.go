@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
-	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/checkout/session"
-	"github.com/stripe/stripe-go/v76/customer"
-	"github.com/stripe/stripe-go/v76/subscription"
-	"github.com/stripe/stripe-go/v76/webhook"
+	"github.com/stripe/stripe-go/v81"
+	"github.com/stripe/stripe-go/v81/checkout/session"
+	"github.com/stripe/stripe-go/v81/customer"
+	"github.com/stripe/stripe-go/v81/subscription"
+	"github.com/stripe/stripe-go/v81/webhook"
 )
 
 type paymentGatewayImpl struct {
@@ -24,15 +24,10 @@ func NewPaymentGateway(apiKey string) outbound.PaymentGateway {
 	}
 }
 
-func (p *paymentGatewayImpl) CreateCustomer(ctx context.Context, email, name string, metadata map[string]string) (string, error) {
+func (p *paymentGatewayImpl) CreateCustomer(ctx context.Context, email, name string) (string, error) {
 	params := &stripe.CustomerParams{
 		Email: stripe.String(email),
 		Name:  stripe.String(name),
-	}
-
-	// Adiciona metadata
-	if metadata != nil {
-		params.Metadata = metadata
 	}
 
 	cust, err := customer.New(params)
@@ -43,20 +38,7 @@ func (p *paymentGatewayImpl) CreateCustomer(ctx context.Context, email, name str
 	return cust.ID, nil
 }
 
-func (p *paymentGatewayImpl) CreateSubscription(ctx context.Context, customerID, priceID, paymentMethodID string) (string, error) {
-	// Primeiro, anexa o payment method ao customer
-	if paymentMethodID != "" {
-		params := &stripe.CustomerParams{
-			InvoiceSettings: &stripe.CustomerInvoiceSettingsParams{
-				DefaultPaymentMethod: stripe.String(paymentMethodID),
-			},
-		}
-		if _, err := customer.Update(customerID, params); err != nil {
-			return "", fmt.Errorf("failed to attach payment method: %w", err)
-		}
-	}
-
-	// Cria a subscription
+func (p *paymentGatewayImpl) CreateSubscription(ctx context.Context, customerID, priceID string) (string, error) {
 	params := &stripe.SubscriptionParams{
 		Customer: stripe.String(customerID),
 		Items: []*stripe.SubscriptionItemsParams{
@@ -65,9 +47,6 @@ func (p *paymentGatewayImpl) CreateSubscription(ctx context.Context, customerID,
 			},
 		},
 		PaymentBehavior: stripe.String("default_incomplete"),
-		PaymentSettings: &stripe.SubscriptionPaymentSettingsParams{
-			SaveDefaultPaymentMethod: stripe.String("on_subscription"),
-		},
 		Expand: []*string{
 			stripe.String("latest_invoice.payment_intent"),
 		},
@@ -92,18 +71,22 @@ func (p *paymentGatewayImpl) CancelSubscription(ctx context.Context, subscriptio
 	return nil
 }
 
-func (p *paymentGatewayImpl) CreateCheckoutSession(ctx context.Context, customerID, priceID, successURL, cancelURL string) (string, error) {
+func (p *paymentGatewayImpl) CreateCheckoutSession(ctx context.Context, userID, email, priceID string) (string, error) {
 	params := &stripe.CheckoutSessionParams{
-		Customer: stripe.String(customerID),
-		Mode:     stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				Price:    stripe.String(priceID),
 				Quantity: stripe.Int64(1),
 			},
 		},
-		SuccessURL: stripe.String(successURL),
-		CancelURL:  stripe.String(cancelURL),
+		CustomerEmail:     stripe.String(email),
+		ClientReferenceID: stripe.String(userID),
+		SuccessURL:        stripe.String("https://app.applywise.com/success?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:         stripe.String("https://app.applywise.com/pricing"),
+		Metadata: map[string]string{
+			"user_id": userID,
+		},
 	}
 
 	sess, err := session.New(params)
@@ -115,7 +98,14 @@ func (p *paymentGatewayImpl) CreateCheckoutSession(ctx context.Context, customer
 }
 
 func (p *paymentGatewayImpl) VerifyWebhookSignature(payload []byte, signature, secret string) error {
-	_, err := webhook.ConstructEvent(payload, signature, secret)
+	_, err := webhook.ConstructEventWithOptions(
+		payload,
+		signature,
+		secret,
+		webhook.ConstructEventOptions{
+			IgnoreAPIVersionMismatch: true,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("webhook signature verification failed: %w", err)
 	}

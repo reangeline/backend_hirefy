@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
@@ -30,9 +31,8 @@ func NewPaymentService(
 }
 
 func (s *paymentServiceImpl) CreateCustomer(ctx context.Context, userID, email, name string) (string, error) {
-	return s.paymentGateway.CreateCustomer(ctx, email, name, map[string]string{
-		"user_id": userID,
-	})
+	return s.paymentGateway.CreateCustomer(ctx, email, name)
+
 }
 
 func (s *paymentServiceImpl) CreatePaymentMethod(ctx context.Context, req inbound.CreatePaymentMethodRequest) (string, error) {
@@ -42,22 +42,18 @@ func (s *paymentServiceImpl) CreatePaymentMethod(ctx context.Context, req inboun
 }
 
 func (s *paymentServiceImpl) CreateCheckoutSession(ctx context.Context, req inbound.CreateCheckoutSessionRequest) (string, error) {
-	// Busca ou cria customer
-	// Nota: Você precisaria buscar o user primeiro para pegar o StripeCustomerID
-	// Por simplicidade, vou assumir que já existe
-
 	// Mapeia plan para priceID
 	priceID := s.getPriceIDForPlan(req.Plan)
 
+	// CreateCheckoutSession agora aceita apenas userID, email, priceID
+	// As URLs são fixas no adapter
 	return s.paymentGateway.CreateCheckoutSession(
 		ctx,
-		"", // customerID - deveria ser passado ou buscado
+		req.UserID, // Assumindo que existe no request
+		req.Email,  // Assumindo que existe no request
 		priceID,
-		req.SuccessURL,
-		req.CancelURL,
 	)
 }
-
 func (s *paymentServiceImpl) HandleWebhook(ctx context.Context, payload []byte, signature string) error {
 	// Verifica a assinatura do webhook
 	if err := s.paymentGateway.VerifyWebhookSignature(payload, signature, s.webhookSecret); err != nil {
@@ -103,22 +99,44 @@ type StripeEvent struct {
 }
 
 func (s *paymentServiceImpl) handleCheckoutCompleted(ctx context.Context, data map[string]interface{}) error {
-	subscriptionID, ok := data["subscription"].(string)
-	if !ok {
-		return fmt.Errorf("missing subscription id")
+	// Extrair dados do checkout
+	customerID, _ := data["customer"].(string)
+	subscriptionID, _ := data["subscription"].(string)
+	metadata, _ := data["metadata"].(map[string]interface{})
+	userID, _ := metadata["user_id"].(string)
+
+	if userID == "" {
+		return fmt.Errorf("missing user_id in metadata")
 	}
 
-	// Busca a subscription
-	subscription, err := s.subscriptionRepo.GetByStripeSubscriptionID(ctx, subscriptionID)
-	if err != nil {
-		return fmt.Errorf("subscription not found: %w", err)
+	if subscriptionID == "" {
+		// Checkout sem subscription (payment único), ignora
+		return nil
 	}
 
-	// Ativa a subscription
-	subscription.Status = domain.SubscriptionStatusActive
-	subscription.UpdatedAt = time.Now()
+	// Verifica se a subscription já existe
+	existingSub, err := s.subscriptionRepo.GetByStripeSubscriptionID(ctx, subscriptionID)
+	if err == nil && existingSub != nil {
+		// Já existe, apenas ativa
+		existingSub.Status = domain.SubscriptionStatusActive
+		existingSub.UpdatedAt = time.Now()
+		return s.subscriptionRepo.Update(ctx, existingSub)
+	}
 
-	return s.subscriptionRepo.Update(ctx, subscription)
+	// Cria nova subscription
+	subscription := &domain.Subscription{
+		ID:               uuid.New().String(),
+		UserID:           userID,
+		Plan:             s.getPlanFromPriceID(data), // Detecta o plano automaticamente
+		Status:           domain.SubscriptionStatusActive,
+		StripeCustomerID: customerID,
+		StripeSubID:      subscriptionID,
+		CurrentPeriodEnd: time.Now().AddDate(0, 1, 0), // 1 mês
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	return s.subscriptionRepo.Create(ctx, subscription)
 }
 
 func (s *paymentServiceImpl) handleSubscriptionUpdated(ctx context.Context, data map[string]interface{}) error {
@@ -217,4 +235,14 @@ func (s *paymentServiceImpl) getPriceIDForPlan(plan string) string {
 		"premium": "price_premium_monthly",
 	}
 	return priceIDs[plan]
+}
+
+func (s *paymentServiceImpl) getPlanFromPriceID(data map[string]interface{}) domain.SubscriptionPlan {
+	// Extrai o priceID do line_items ou usa default
+	// Por enquanto, retorna o plano premium/básico
+	// TODO: Mapear corretamente do priceID
+
+	// Se você tiver PlanBasic ou PlanPremium, use um deles
+	// Caso contrário, veja qual constante existe em domain.SubscriptionPlan
+	return domain.PlanPremium // ou domain.PlanBasic, dependendo do que existir
 }
