@@ -19,6 +19,7 @@ type User struct {
 	Status           UserStatus `json:"status"`
 	CognitoID        string     `json:"cognito_id"`
 	StripeCustomerID string     `json:"stripe_customer_id,omitempty"`
+	EmailVerified    bool       `json:"email_verified"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
@@ -26,12 +27,13 @@ type User struct {
 func NewUser(email, name, cognitoID string) *User {
 	now := time.Now()
 	return &User{
-		Email:     email,
-		Name:      name,
-		Status:    UserStatusActive,
-		CognitoID: cognitoID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Email:         email,
+		Name:          name,
+		Status:        UserStatusActive,
+		CognitoID:     cognitoID,
+		EmailVerified: false,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 }
 

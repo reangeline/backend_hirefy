@@ -3,6 +3,7 @@ package cognito
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,10 +14,9 @@ import (
 )
 
 type authProviderImpl struct {
-	client       *cognitoidentityprovider.Client
-	userPoolID   string
-	clientID     string
-	clientSecret string
+	client     *cognitoidentityprovider.Client
+	userPoolID string
+	clientID   string
 }
 
 // NewAuthProvider cria nova instância do provider de autenticação
@@ -28,6 +28,7 @@ func NewAuthProvider(cfg aws.Config, userPoolID, clientID string) outbound.AuthP
 	}
 }
 
+// SignUp cria um novo usuário no Cognito
 func (a *authProviderImpl) SignUp(ctx context.Context, email, password, name string) (string, error) {
 	input := &cognitoidentityprovider.SignUpInput{
 		ClientId: aws.String(a.clientID),
@@ -58,6 +59,7 @@ func (a *authProviderImpl) SignUp(ctx context.Context, email, password, name str
 	return *result.UserSub, nil
 }
 
+// SignIn autentica um usuário
 func (a *authProviderImpl) SignIn(ctx context.Context, email, password string) (accessToken, refreshToken, idToken string, expiresIn int, err error) {
 	input := &cognitoidentityprovider.InitiateAuthInput{
 		AuthFlow: types.AuthFlowTypeUserPasswordAuth,
@@ -84,6 +86,7 @@ func (a *authProviderImpl) SignIn(ctx context.Context, email, password string) (
 		nil
 }
 
+// SignOut faz logout global do usuário
 func (a *authProviderImpl) SignOut(ctx context.Context, accessToken string) error {
 	input := &cognitoidentityprovider.GlobalSignOutInput{
 		AccessToken: aws.String(accessToken),
@@ -97,6 +100,7 @@ func (a *authProviderImpl) SignOut(ctx context.Context, accessToken string) erro
 	return nil
 }
 
+// RefreshToken renova o access token
 func (a *authProviderImpl) RefreshToken(ctx context.Context, refreshToken string) (accessToken, idToken string, expiresIn int, err error) {
 	input := &cognitoidentityprovider.InitiateAuthInput{
 		AuthFlow: types.AuthFlowTypeRefreshTokenAuth,
@@ -121,6 +125,7 @@ func (a *authProviderImpl) RefreshToken(ctx context.Context, refreshToken string
 		nil
 }
 
+// VerifyToken verifica e valida um JWT token
 func (a *authProviderImpl) VerifyToken(ctx context.Context, token string) (string, error) {
 	// Parse o JWT sem verificar assinatura (apenas para MVP/desenvolvimento)
 	parser := jwt.NewParser()
@@ -150,6 +155,37 @@ func (a *authProviderImpl) VerifyToken(ctx context.Context, token string) (strin
 	return sub, nil
 }
 
+// ConfirmSignUp confirma o email do usuário com código
+func (a *authProviderImpl) ConfirmSignUp(ctx context.Context, email, confirmationCode string) error {
+	input := &cognitoidentityprovider.ConfirmSignUpInput{
+		ClientId:         aws.String(a.clientID),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(confirmationCode),
+	}
+
+	_, err := a.client.ConfirmSignUp(ctx, input)
+	if err != nil {
+		return a.handleCognitoError(err)
+	}
+
+	return nil
+}
+
+// ResendConfirmationCode reenvia o código de confirmação
+func (a *authProviderImpl) ResendConfirmationCode(ctx context.Context, email string) error {
+	input := &cognitoidentityprovider.ResendConfirmationCodeInput{
+		ClientId: aws.String(a.clientID),
+		Username: aws.String(email),
+	}
+
+	_, err := a.client.ResendConfirmationCode(ctx, input)
+	if err != nil {
+		return a.handleCognitoError(err)
+	}
+
+	return nil
+}
+
 // confirmUser auto-confirma o usuário (apenas para desenvolvimento)
 func (a *authProviderImpl) confirmUser(ctx context.Context, username string) error {
 	input := &cognitoidentityprovider.AdminConfirmSignUpInput{
@@ -159,4 +195,32 @@ func (a *authProviderImpl) confirmUser(ctx context.Context, username string) err
 
 	_, err := a.client.AdminConfirmSignUp(ctx, input)
 	return err
+}
+
+func (a *authProviderImpl) handleCognitoError(err error) error {
+	// Mapeia erros específicos do Cognito para mensagens amigáveis
+	errMsg := err.Error()
+
+	switch e := err.(type) {
+	case *types.CodeMismatchException:
+		return fmt.Errorf("CodeMismatchException: Invalid verification code provided")
+	case *types.ExpiredCodeException:
+		return fmt.Errorf("ExpiredCodeException: Verification code has expired, please request a new one")
+	case *types.UserNotFoundException:
+		return fmt.Errorf("UserNotFoundException: User does not exist")
+	case *types.NotAuthorizedException:
+		return fmt.Errorf("NotAuthorizedException: User cannot be confirmed. User may already be confirmed")
+	case *types.TooManyRequestsException:
+		return fmt.Errorf("TooManyRequestsException: Too many requests, please try again later")
+	case *types.InvalidParameterException:
+		// Se for erro de reenvio para usuário já confirmado
+		if strings.Contains(errMsg, "already confirmed") || strings.Contains(errMsg, "cannot reset") {
+			return fmt.Errorf("NotAuthorizedException: User is already confirmed")
+		}
+		return fmt.Errorf("InvalidParameterException: Invalid parameter provided")
+	default:
+		// Log do erro original para debug
+		fmt.Printf("Cognito error: %v\n", err)
+		return fmt.Errorf("CognitoError: %v", e)
+	}
 }

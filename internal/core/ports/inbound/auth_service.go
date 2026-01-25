@@ -13,11 +13,27 @@ type SignInRequest struct {
 	Password string
 }
 
-type AuthResponse struct {
-	AccessToken  string
+type RefreshTokenRequest struct {
 	RefreshToken string
-	IDToken      string
-	ExpiresIn    int
+}
+
+type ConfirmSignUpRequest struct {
+	Email string
+	Code  string
+}
+
+type ResendCodeRequest struct {
+	Email string
+}
+
+// ✅ ADICIONAR AuthResponse
+type AuthResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	IDToken      string `json:"id_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Message      string `json:"message,omitempty"` // ✅ CERTIFIQUE-SE QUE ESTÁ AQUI
+
 }
 
 type AuthService interface {
@@ -25,5 +41,7 @@ type AuthService interface {
 	SignIn(ctx context.Context, req SignInRequest) (*AuthResponse, error)
 	SignOut(ctx context.Context, accessToken string) error
 	RefreshToken(ctx context.Context, refreshToken string) (*AuthResponse, error)
-	VerifyToken(ctx context.Context, token string) (string, error) // retorna cognitoID
+	VerifyToken(ctx context.Context, token string) (string, error) // ✅ ADICIONAR
+	ConfirmSignUp(ctx context.Context, req ConfirmSignUpRequest) error
+	ResendConfirmationCode(ctx context.Context, req ResendCodeRequest) error
 }

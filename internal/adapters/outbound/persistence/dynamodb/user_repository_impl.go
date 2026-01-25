@@ -36,6 +36,7 @@ type UserItem struct {
 	Status           string `dynamodbav:"Status"`
 	CognitoID        string `dynamodbav:"CognitoID"`
 	StripeCustomerID string `dynamodbav:"StripeCustomerID,omitempty"`
+	EmailVerified    bool   `dynamodbav:"EmailVerified"`
 	CreatedAt        string `dynamodbav:"CreatedAt"`
 	UpdatedAt        string `dynamodbav:"UpdatedAt"`
 }
@@ -55,6 +56,7 @@ func (r *userRepositoryImpl) Create(ctx context.Context, user *domain.User) erro
 		Status:           string(user.Status),
 		CognitoID:        user.CognitoID,
 		StripeCustomerID: user.StripeCustomerID,
+		EmailVerified:    user.EmailVerified,
 		CreatedAt:        user.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        user.UpdatedAt.Format(time.RFC3339),
 	}
@@ -154,25 +156,33 @@ func (r *userRepositoryImpl) GetByCognitoID(ctx context.Context, cognitoID strin
 }
 
 func (r *userRepositoryImpl) Update(ctx context.Context, user *domain.User) error {
+	updateExpr := "SET #name = :name, #status = :status, #stripeCustomerID = :stripeCustomerID, #emailVerified = :emailVerified, #updatedAt = :updatedAt"
+
+	exprAttrNames := map[string]string{
+		"#name":             "Name",
+		"#status":           "Status",
+		"#stripeCustomerID": "StripeCustomerID",
+		"#emailVerified":    "EmailVerified",
+		"#updatedAt":        "UpdatedAt",
+	}
+
+	exprAttrValues := map[string]types.AttributeValue{
+		":name":             &types.AttributeValueMemberS{Value: user.Name},
+		":status":           &types.AttributeValueMemberS{Value: string(user.Status)},
+		":stripeCustomerID": &types.AttributeValueMemberS{Value: user.StripeCustomerID},
+		":emailVerified":    &types.AttributeValueMemberBOOL{Value: user.EmailVerified},
+		":updatedAt":        &types.AttributeValueMemberS{Value: user.UpdatedAt.Format(time.RFC3339)},
+	}
+
 	_, err := r.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.client.tableName),
 		Key: map[string]types.AttributeValue{
 			"PK": &types.AttributeValueMemberS{Value: fmt.Sprintf("USER#%s", user.ID)},
 			"SK": &types.AttributeValueMemberS{Value: "METADATA"},
 		},
-		UpdateExpression: aws.String("SET #name = :name, #status = :status, #stripeCustomerID = :stripeCustomerID, #updatedAt = :updatedAt"),
-		ExpressionAttributeNames: map[string]string{
-			"#name":             "Name",
-			"#status":           "Status",
-			"#stripeCustomerID": "StripeCustomerID",
-			"#updatedAt":        "UpdatedAt",
-		},
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":name":             &types.AttributeValueMemberS{Value: user.Name},
-			":status":           &types.AttributeValueMemberS{Value: string(user.Status)},
-			":stripeCustomerID": &types.AttributeValueMemberS{Value: user.StripeCustomerID},
-			":updatedAt":        &types.AttributeValueMemberS{Value: user.UpdatedAt.Format(time.RFC3339)},
-		},
+		UpdateExpression:          aws.String(updateExpr),
+		ExpressionAttributeNames:  exprAttrNames,
+		ExpressionAttributeValues: exprAttrValues,
 	})
 
 	return err
@@ -208,6 +218,7 @@ func (r *userRepositoryImpl) itemToUser(item *UserItem) (*domain.User, error) {
 		Status:           domain.UserStatus(item.Status),
 		CognitoID:        item.CognitoID,
 		StripeCustomerID: item.StripeCustomerID,
+		EmailVerified:    item.EmailVerified,
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 	}, nil

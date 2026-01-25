@@ -7,6 +7,7 @@ var (
 	ErrUserNotFound      = errors.New("user not found")
 	ErrUserAlreadyExists = errors.New("user already exists")
 	ErrInvalidEmail      = errors.New("invalid email")
+	ErrEmailNotVerified  = errors.New("email not verified")
 
 	// Subscription errors
 	ErrSubscriptionNotFound        = errors.New("subscription not found")

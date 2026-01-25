@@ -66,6 +66,9 @@ func NewRouter(
 		r.Post("/auth/signup", authHandler.SignUp)
 		r.Post("/auth/signin", authHandler.SignIn)
 		r.Post("/auth/refresh", authHandler.RefreshToken)
+		r.Post("/auth/confirm", authHandler.ConfirmSignUp)
+		r.Post("/auth/resend-code", authHandler.ResendCode)
+
 		r.Post("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
 
 		// Protegidas
