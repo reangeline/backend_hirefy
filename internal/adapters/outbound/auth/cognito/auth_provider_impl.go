@@ -61,6 +61,7 @@ func (a *authProviderImpl) SignUp(ctx context.Context, email, password, name str
 
 // SignIn autentica um usuário
 func (a *authProviderImpl) SignIn(ctx context.Context, email, password string) (accessToken, refreshToken, idToken string, expiresIn int, err error) {
+
 	input := &cognitoidentityprovider.InitiateAuthInput{
 		AuthFlow: types.AuthFlowTypeUserPasswordAuth,
 		ClientId: aws.String(a.clientID),
@@ -223,4 +224,25 @@ func (a *authProviderImpl) handleCognitoError(err error) error {
 		fmt.Printf("Cognito error: %v\n", err)
 		return fmt.Errorf("CognitoError: %v", e)
 	}
+}
+
+func (a *authProviderImpl) MarkEmailAsVerified(ctx context.Context, email string) error {
+	input := &cognitoidentityprovider.AdminUpdateUserAttributesInput{
+		UserPoolId: aws.String(a.userPoolID),
+		Username:   aws.String(email),
+		UserAttributes: []types.AttributeType{
+			{
+				Name:  aws.String("email_verified"),
+				Value: aws.String("true"),
+			},
+		},
+	}
+
+	_, err := a.client.AdminUpdateUserAttributes(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to mark email as verified in Cognito: %w", err)
+	}
+
+	fmt.Printf("✅ Cognito: email_verified set to true for %s\n", email)
+	return nil
 }

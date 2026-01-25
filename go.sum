@@ -16,6 +16,8 @@ github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.17 h1:WWLqlh79iO48yLkj1v
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.17/go.mod h1:EhG22vHRrvF8oXSTYStZhJc1aUgKtnJe+aOiFEV90cM=
 github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 h1:WKuaxf++XKWlHWu9ECbMlha8WOEGm0OUEZqm4K/Gcfk=
 github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4/go.mod h1:ZWy7j6v1vWGmPReu0iSGvRiise4YI5SkR3OHKTZ6Wuc=
+github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.17 h1:JqcdRG//czea7Ppjb+g/n4o8i/R50aTBHkA7vu0lK+k=
+github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.17/go.mod h1:CO+WeGmIdj/MlPel2KwID9Gt7CNq4M65HUfBW97liM0=
 github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider v1.57.19 h1:MjbZyT+i1cuKEOjNH8+VgtoR92V69Vc2yd9xeTu+D3U=
 github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider v1.57.19/go.mod h1:bBgsO3htjygdyPTgT0Fou14A5VAQaLqiJ8YE2SW4NKw=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.53.6 h1:LNmvkGzDO5PYXDW6m7igx+s2jKaPchpfbS0uDICywFc=
@@ -28,6 +30,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.11.17 h1:Nhx
 github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.11.17/go.mod h1:AjmK8JWnlAevq1b1NBtv5oQVG4iqnYXUufdgol+q9wg=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.17 h1:RuNSMoozM8oXlgLG/n6WLaFGoea7/CddrCfIiSA+xdY=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.17/go.mod h1:F2xxQ9TZz5gDWsclCtPQscGpP0VUOc8RqgFM3vDENmU=
+github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.1 h1:0Pitfk3kTCUeJp+7xvTYhdgwVQhszqw1i4s8U93Z/ds=
+github.com/aws/aws-sdk-go-v2/service/sesv2 v1.59.1/go.mod h1:lm1VCfakGKIqjexled4IMNMxgOQpDk7buAFd+7lr9pA=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.5 h1:VrhDvQib/i0lxvr3zqlUwLwJP4fpmpyD9wYG1vfSu+Y=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.5/go.mod h1:k029+U8SY30/3/ras4G/Fnv/b88N4mAfliNn08Dem4M=
 github.com/aws/aws-sdk-go-v2/service/sso v1.30.9 h1:v6EiMvhEYBoHABfbGB4alOYmCIrcgyPPiBE1wZAEbqk=

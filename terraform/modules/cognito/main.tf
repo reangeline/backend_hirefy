@@ -2,7 +2,10 @@ resource "aws_cognito_user_pool" "main" {
   name = "${var.app_name}-${var.environment}"
 
   username_attributes = ["email"]
-  auto_verified_attributes = ["email"]
+  
+  # ❌ REMOVER auto_verified_attributes
+  # Isso faz o Cognito enviar email automático
+  # auto_verified_attributes = ["email"]
 
   password_policy {
     minimum_length    = 8
@@ -31,6 +34,16 @@ resource "aws_cognito_user_pool" "main" {
       name     = "verified_email"
       priority = 1
     }
+  }
+
+  # ✅ ADICIONAR: Configuração de email (sem SES por enquanto)
+  email_configuration {
+    email_sending_account = "COGNITO_DEFAULT"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = "applywise"
   }
 }
 

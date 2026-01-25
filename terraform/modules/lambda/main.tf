@@ -66,6 +66,26 @@ resource "aws_iam_role_policy" "lambda_cognito" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_ses" {
+  name = "${var.function_name}-ses-${var.environment}"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "sesv2:SendEmail"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_lambda_function" "main" {
   function_name = "${var.function_name}-${var.environment}"
   role          = aws_iam_role.lambda.arn

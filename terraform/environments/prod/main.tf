@@ -54,10 +54,13 @@ module "lambda" {
     STRIPE_SECRET_KEY       = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET   = var.stripe_webhook_secret
     OPENAI_API_KEY          = var.openai_api_key
+    SES_FROM_EMAIL            = var.ses_from_email 
+    ENVIRONMENT               = var.environment
   }
 
   dynamodb_table_arn = module.dynamodb.table_arn
   cognito_pool_arn   = module.cognito.user_pool_arn
+  ses_from_email           = var.ses_from_email
 }
 
 # API Gateway

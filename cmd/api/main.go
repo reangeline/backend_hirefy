@@ -11,9 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 
+	"github.com/aws/aws-sdk-go-v2/service/sesv2" // ✅ ADICIONAR
 	httpAdapter "github.com/reangeline/backend_applywise/internal/adapters/inbound/http"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/ai/openai"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/auth/cognito"
+	emailadapter "github.com/reangeline/backend_applywise/internal/adapters/outbound/email" // ✅ ADICIONAR
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/payment/stripe"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/persistence/dynamodb"
 	appservice "github.com/reangeline/backend_applywise/internal/application/service"
@@ -34,10 +36,19 @@ func init() {
 
 	// Inicializa adapters (outbound)
 	dynamoClient := dynamodb.NewClient(awsCfg, cfg.DynamoDBTable)
+	sesClient := sesv2.NewFromConfig(awsCfg)
 
 	userRepo := dynamodb.NewUserRepository(dynamoClient)
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
 	resumeRepo := dynamodb.NewResumeRepository(dynamoClient)
+	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient) // ✅ ADICIONAR
+
+	emailService := emailadapter.NewEmailService(emailadapter.EmailConfig{
+		Client:    sesClient,
+		FromEmail: os.Getenv("SES_FROM_EMAIL"),
+		FromName:  "ApplyWise",
+		IsDev:     os.Getenv("ENVIRONMENT") == "dev",
+	})
 
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
@@ -45,7 +56,15 @@ func init() {
 
 	// Inicializa services (application layer)
 	userService := appservice.NewUserService(userRepo)
-	authService := appservice.NewAuthService(cognitoClient, userRepo)
+
+	authService := appservice.NewAuthService(
+		cognitoClient,
+		userRepo,
+		subscriptionRepo,
+		verificationRepo,
+		emailService,
+	)
+
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)
@@ -87,13 +106,23 @@ func runLocalServer() {
 	userRepo := dynamodb.NewUserRepository(dynamoClient)
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
 	resumeRepo := dynamodb.NewResumeRepository(dynamoClient)
-
+	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
 
+	sesClient := sesv2.NewFromConfig(awsCfg)
+
+	emailService := emailadapter.NewEmailService(emailadapter.EmailConfig{
+		Client:    sesClient,
+		FromEmail: os.Getenv("SES_FROM_EMAIL"),
+		FromName:  "ApplyWise",
+		IsDev:     os.Getenv("ENVIRONMENT") == "dev",
+	})
+
 	userService := appservice.NewUserService(userRepo)
-	authService := appservice.NewAuthService(cognitoClient, userRepo)
+	authService := appservice.NewAuthService(cognitoClient, userRepo, subscriptionRepo, verificationRepo, emailService)
+
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)

@@ -47,6 +47,7 @@ func NewRouter(
 	resumeHandler := handler.NewResumeHandler(resumeService)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handler.NewWebhookHandler(paymentService)
+	userHandler := handler.NewUserHandler(userService)
 
 	// Health check na raiz
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +84,10 @@ func NewRouter(
 
 			r.Get("/subscription", subscriptionHandler.GetSubscription)
 			r.Post("/subscription", subscriptionHandler.CreateSubscription)
-			r.Post("/subscription/checkout", subscriptionHandler.CreateCheckout) // ← ADICIONAR
+			r.Post("/subscription/checkout", subscriptionHandler.CreateCheckout)
 			r.Delete("/subscription", subscriptionHandler.CancelSubscription)
+
+			r.Get("/users/me", userHandler.GetMe)
 		})
 	})
 

@@ -58,10 +58,14 @@ module "lambda" {
     STRIPE_FREE_PRICE_ID    = var.stripe_free_price_id
     STRIPE_PRO_PRICE_ID     = var.stripe_pro_price_id   
     OPENAI_API_KEY          = var.openai_api_key
+    SES_FROM_EMAIL            = var.ses_from_email 
+    ENVIRONMENT               = var.environment
   }
 
   dynamodb_table_arn = module.dynamodb.table_arn
   cognito_pool_arn   = module.cognito.user_pool_arn
+  ses_from_email           = var.ses_from_email
+
 }
 
 # API Gateway

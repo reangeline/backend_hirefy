@@ -12,4 +12,5 @@ type AuthProvider interface {
 	VerifyToken(ctx context.Context, token string) (string, error)
 	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
 	ResendConfirmationCode(ctx context.Context, email string) error
+	MarkEmailAsVerified(ctx context.Context, email string) error
 }

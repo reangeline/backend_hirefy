@@ -64,6 +64,7 @@ func (h *AuthHandler) SignIn(w http.ResponseWriter, r *http.Request) {
 		Email:    req.Email,
 		Password: req.Password,
 	})
+
 	if err != nil {
 		respondError(w, http.StatusUnauthorized, "invalid credentials")
 		return

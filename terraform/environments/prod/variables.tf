@@ -39,3 +39,9 @@ variable "stripe_webhook_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "ses_from_email" {
+  description = "Email to send from"
+  type        = string
+  default     = "reangeline@hotmail.com"  # ✅ Seu email verificado
+}
