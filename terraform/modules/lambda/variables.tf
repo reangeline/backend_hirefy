@@ -43,3 +43,9 @@ variable "ses_from_email" {
   description = "Email address to send from (must be verified in SES)"
   type        = string
 }
+
+variable "revenuecat_webhook_secret" {
+  description = "RevenueCat webhook secret for signature validation"
+  type        = string
+  sensitive   = true
+}

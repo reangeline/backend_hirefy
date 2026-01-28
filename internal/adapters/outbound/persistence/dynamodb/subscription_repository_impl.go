@@ -22,17 +22,26 @@ func NewSubscriptionRepository(client *Client) outbound.SubscriptionRepository {
 }
 
 type SubscriptionItem struct {
-	PK               string  `dynamodbav:"PK"`     // USER#<user_id>
-	SK               string  `dynamodbav:"SK"`     // SUB#<sub_id>
-	GSI2PK           string  `dynamodbav:"GSI2PK"` // STRIPESUB#<stripe_sub_id>
-	GSI2SK           string  `dynamodbav:"GSI2SK"` // SUBSCRIPTION
-	Type             string  `dynamodbav:"Type"`   // SUBSCRIPTION
-	ID               string  `dynamodbav:"ID"`
-	UserID           string  `dynamodbav:"UserID"`
-	Plan             string  `dynamodbav:"Plan"`
-	Status           string  `dynamodbav:"Status"`
-	StripeCustomerID string  `dynamodbav:"StripeCustomerID"`
-	StripeSubID      string  `dynamodbav:"StripeSubID"`
+	PK     string `dynamodbav:"PK"`     // USER#<user_id>
+	SK     string `dynamodbav:"SK"`     // SUB#<sub_id>
+	GSI2PK string `dynamodbav:"GSI2PK"` // STRIPESUB#<stripe_sub_id> ou RCSUB#<rc_customer_id>
+	GSI2SK string `dynamodbav:"GSI2SK"` // SUBSCRIPTION
+	Type   string `dynamodbav:"Type"`   // SUBSCRIPTION
+	ID     string `dynamodbav:"ID"`
+	UserID string `dynamodbav:"UserID"`
+	Plan   string `dynamodbav:"Plan"`
+	Status string `dynamodbav:"Status"`
+
+	// Stripe
+	StripeCustomerID string `dynamodbav:"StripeCustomerID"`
+	StripeSubID      string `dynamodbav:"StripeSubID"`
+
+	// RevenueCat
+	RevenueCatCustomerID            string `dynamodbav:"RevenueCatCustomerID,omitempty"`
+	RevenueCatOriginalTransactionID string `dynamodbav:"RevenueCatOriginalTransactionID,omitempty"`
+	Store                           string `dynamodbav:"Store,omitempty"`
+	ProductIdentifier               string `dynamodbav:"ProductIdentifier,omitempty"`
+
 	CurrentPeriodEnd string  `dynamodbav:"CurrentPeriodEnd"`
 	CreatedAt        string  `dynamodbav:"CreatedAt"`
 	UpdatedAt        string  `dynamodbav:"UpdatedAt"`
@@ -46,22 +55,32 @@ func (r *subscriptionRepositoryImpl) Create(ctx context.Context, subscription *d
 		canceledAt = &t
 	}
 
+	// Determinar GSI2PK baseado no tipo de subscription
+	gsi2PK := fmt.Sprintf("STRIPESUB#%s", subscription.StripeSubID)
+	if subscription.RevenueCatCustomerID != "" {
+		gsi2PK = fmt.Sprintf("RCSUB#%s", subscription.RevenueCatCustomerID)
+	}
+
 	item := SubscriptionItem{
-		PK:               fmt.Sprintf("USER#%s", subscription.UserID),
-		SK:               fmt.Sprintf("SUB#%s", subscription.ID),
-		GSI2PK:           fmt.Sprintf("STRIPESUB#%s", subscription.StripeSubID),
-		GSI2SK:           "SUBSCRIPTION",
-		Type:             "SUBSCRIPTION",
-		ID:               subscription.ID,
-		UserID:           subscription.UserID,
-		Plan:             string(subscription.Plan),
-		Status:           string(subscription.Status),
-		StripeCustomerID: subscription.StripeCustomerID,
-		StripeSubID:      subscription.StripeSubID,
-		CurrentPeriodEnd: subscription.CurrentPeriodEnd.Format(time.RFC3339),
-		CreatedAt:        subscription.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:        subscription.UpdatedAt.Format(time.RFC3339),
-		CanceledAt:       canceledAt,
+		PK:                              fmt.Sprintf("USER#%s", subscription.UserID),
+		SK:                              fmt.Sprintf("SUB#%s", subscription.ID),
+		GSI2PK:                          gsi2PK,
+		GSI2SK:                          "SUBSCRIPTION",
+		Type:                            "SUBSCRIPTION",
+		ID:                              subscription.ID,
+		UserID:                          subscription.UserID,
+		Plan:                            string(subscription.Plan),
+		Status:                          string(subscription.Status),
+		StripeCustomerID:                subscription.StripeCustomerID,
+		StripeSubID:                     subscription.StripeSubID,
+		RevenueCatCustomerID:            subscription.RevenueCatCustomerID,
+		RevenueCatOriginalTransactionID: subscription.RevenueCatOriginalTransactionID,
+		Store:                           string(subscription.Store),
+		ProductIdentifier:               subscription.ProductIdentifier,
+		CurrentPeriodEnd:                subscription.CurrentPeriodEnd.Format(time.RFC3339),
+		CreatedAt:                       subscription.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:                       subscription.UpdatedAt.Format(time.RFC3339),
+		CanceledAt:                      canceledAt,
 	}
 
 	av, err := attributevalue.MarshalMap(item)
@@ -78,8 +97,6 @@ func (r *subscriptionRepositoryImpl) Create(ctx context.Context, subscription *d
 }
 
 func (r *subscriptionRepositoryImpl) GetByID(ctx context.Context, subscriptionID string) (*domain.Subscription, error) {
-	// Para buscar por ID sem saber o UserID, precisamos fazer um scan ou ter um GSI
-	// Por simplicidade, vou assumir que sempre buscaremos por UserID
 	return nil, fmt.Errorf("not implemented: use GetByUserID instead")
 }
 
@@ -138,6 +155,35 @@ func (r *subscriptionRepositoryImpl) GetByStripeSubscriptionID(ctx context.Conte
 	return r.itemToSubscription(&item)
 }
 
+// ✅ NOVO: Buscar por RevenueCat Customer ID
+func (r *subscriptionRepositoryImpl) GetByRevenueCatCustomerID(ctx context.Context, customerID string) (*domain.Subscription, error) {
+	result, err := r.client.db.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.client.tableName),
+		IndexName:              aws.String("GSI2"),
+		KeyConditionExpression: aws.String("GSI2PK = :pk AND GSI2SK = :sk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("RCSUB#%s", customerID)},
+			":sk": &types.AttributeValueMemberS{Value: "SUBSCRIPTION"},
+		},
+		Limit: aws.Int32(1),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result.Items) == 0 {
+		return nil, domain.ErrSubscriptionNotFound
+	}
+
+	var item SubscriptionItem
+	if err := attributevalue.UnmarshalMap(result.Items[0], &item); err != nil {
+		return nil, err
+	}
+
+	return r.itemToSubscription(&item)
+}
+
 func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *domain.Subscription) error {
 	var canceledAt *string
 	if subscription.CanceledAt != nil {
@@ -145,18 +191,38 @@ func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *d
 		canceledAt = &t
 	}
 
-	updateExpr := "SET #plan = :plan, #status = :status, #currentPeriodEnd = :currentPeriodEnd, #updatedAt = :updatedAt"
+	// Atualizar GSI2PK se for RevenueCat
+	gsi2PK := fmt.Sprintf("STRIPESUB#%s", subscription.StripeSubID)
+	if subscription.RevenueCatCustomerID != "" {
+		gsi2PK = fmt.Sprintf("RCSUB#%s", subscription.RevenueCatCustomerID)
+	}
+
+	updateExpr := `SET #plan = :plan, #status = :status, #currentPeriodEnd = :currentPeriodEnd, 
+		#updatedAt = :updatedAt, #gsi2pk = :gsi2pk, #store = :store, #productId = :productId,
+		#rcCustomerId = :rcCustomerId, #rcTransactionId = :rcTransactionId`
+
 	exprAttrNames := map[string]string{
 		"#plan":             "Plan",
 		"#status":           "Status",
 		"#currentPeriodEnd": "CurrentPeriodEnd",
 		"#updatedAt":        "UpdatedAt",
+		"#gsi2pk":           "GSI2PK",
+		"#store":            "Store",
+		"#productId":        "ProductIdentifier",
+		"#rcCustomerId":     "RevenueCatCustomerID",
+		"#rcTransactionId":  "RevenueCatOriginalTransactionID",
 	}
+
 	exprAttrValues := map[string]types.AttributeValue{
 		":plan":             &types.AttributeValueMemberS{Value: string(subscription.Plan)},
 		":status":           &types.AttributeValueMemberS{Value: string(subscription.Status)},
 		":currentPeriodEnd": &types.AttributeValueMemberS{Value: subscription.CurrentPeriodEnd.Format(time.RFC3339)},
 		":updatedAt":        &types.AttributeValueMemberS{Value: subscription.UpdatedAt.Format(time.RFC3339)},
+		":gsi2pk":           &types.AttributeValueMemberS{Value: gsi2PK},
+		":store":            &types.AttributeValueMemberS{Value: string(subscription.Store)},
+		":productId":        &types.AttributeValueMemberS{Value: subscription.ProductIdentifier},
+		":rcCustomerId":     &types.AttributeValueMemberS{Value: subscription.RevenueCatCustomerID},
+		":rcTransactionId":  &types.AttributeValueMemberS{Value: subscription.RevenueCatOriginalTransactionID},
 	}
 
 	if canceledAt != nil {
@@ -205,15 +271,19 @@ func (r *subscriptionRepositoryImpl) itemToSubscription(item *SubscriptionItem) 
 	}
 
 	return &domain.Subscription{
-		ID:               item.ID,
-		UserID:           item.UserID,
-		Plan:             domain.SubscriptionPlan(item.Plan),
-		Status:           domain.SubscriptionStatus(item.Status),
-		StripeCustomerID: item.StripeCustomerID,
-		StripeSubID:      item.StripeSubID,
-		CurrentPeriodEnd: currentPeriodEnd,
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
-		CanceledAt:       canceledAt,
+		ID:                              item.ID,
+		UserID:                          item.UserID,
+		Plan:                            domain.SubscriptionPlan(item.Plan),
+		Status:                          domain.SubscriptionStatus(item.Status),
+		StripeCustomerID:                item.StripeCustomerID,
+		StripeSubID:                     item.StripeSubID,
+		RevenueCatCustomerID:            item.RevenueCatCustomerID,
+		RevenueCatOriginalTransactionID: item.RevenueCatOriginalTransactionID,
+		Store:                           domain.Store(item.Store),
+		ProductIdentifier:               item.ProductIdentifier,
+		CurrentPeriodEnd:                currentPeriodEnd,
+		CreatedAt:                       createdAt,
+		UpdatedAt:                       updatedAt,
+		CanceledAt:                      canceledAt,
 	}, nil
 }

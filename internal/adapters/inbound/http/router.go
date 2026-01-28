@@ -18,13 +18,13 @@ func NewRouter(
 	subscriptionService inbound.SubscriptionService,
 	resumeService inbound.ResumeOptimizerService,
 	paymentService inbound.PaymentService,
+	revenueCatService inbound.RevenueCatService, // ✅ ADICIONAR
 ) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 
-	// Middleware para normalizar paths (remove barras duplas)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "//") {
@@ -37,7 +37,7 @@ func NewRouter(
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Revenuecat-Signature"}, // ✅ ADICIONAR header
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -47,17 +47,15 @@ func NewRouter(
 	resumeHandler := handler.NewResumeHandler(resumeService)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handler.NewWebhookHandler(paymentService)
+	revenueCatWebhookHandler := handler.NewRevenueCatWebhookHandler(revenueCatService) // ✅ ADICIONAR
 	userHandler := handler.NewUserHandler(userService)
 
-	// Health check na raiz
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","service":"applywise-api"}`))
 	})
 
-	// Rotas API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// Health check
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status":"ok","version":"v1"}`))
@@ -70,7 +68,9 @@ func NewRouter(
 		r.Post("/auth/confirm", authHandler.ConfirmSignUp)
 		r.Post("/auth/resend-code", authHandler.ResendCode)
 
+		// Webhooks (públicos mas com validação de signature)
 		r.Post("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
+		r.Post("/webhooks/revenuecat", revenueCatWebhookHandler.HandleWebhook) // ✅ ADICIONAR
 
 		// Protegidas
 		r.Group(func(r chi.Router) {

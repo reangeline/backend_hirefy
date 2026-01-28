@@ -57,3 +57,9 @@ variable "ses_from_email" {
   type        = string
   default     = "reangeline@hotmail.com"
 }
+
+variable "revenuecat_webhook_secret" {
+  description = "RevenueCat webhook secret"
+  type        = string
+  default     = ""  # Vazio por enquanto, vamos configurar depois
+}

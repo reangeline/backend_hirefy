@@ -131,10 +131,10 @@ func (r *userRepositoryImpl) GetByCognitoID(ctx context.Context, cognitoID strin
 	result, err := r.client.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.client.tableName),
 		IndexName:              aws.String("GSI2"),
-		KeyConditionExpression: aws.String("GSI2PK = :cognito AND GSI2SK = :sk"),
+		KeyConditionExpression: aws.String("GSI2PK = :pk AND GSI2SK = :sk"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":cognito": &types.AttributeValueMemberS{Value: fmt.Sprintf("COGNITO#%s", cognitoID)},
-			":sk":      &types.AttributeValueMemberS{Value: "USER"},
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("COGNITO#%s", cognitoID)},
+			":sk": &types.AttributeValueMemberS{Value: "USER"},
 		},
 		Limit: aws.Int32(1),
 	})

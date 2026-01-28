@@ -60,11 +60,14 @@ module "lambda" {
     OPENAI_API_KEY          = var.openai_api_key
     SES_FROM_EMAIL            = var.ses_from_email 
     ENVIRONMENT               = var.environment
+    REVENUECAT_WEBHOOK_SECRET = var.revenuecat_webhook_secret
   }
 
   dynamodb_table_arn = module.dynamodb.table_arn
   cognito_pool_arn   = module.cognito.user_pool_arn
   ses_from_email           = var.ses_from_email
+  revenuecat_webhook_secret = var.revenuecat_webhook_secret
+
 
 }
 

@@ -6,6 +6,7 @@ import (
 
 type SubscriptionStatus string
 type SubscriptionPlan string
+type Store string
 
 const (
 	SubscriptionStatusActive   SubscriptionStatus = "active"
@@ -20,17 +21,33 @@ const (
 	PlanPremium SubscriptionPlan = "premium"
 )
 
+const (
+	StoreAppStore  Store = "app_store"
+	StorePlayStore Store = "play_store"
+	StoreStripe    Store = "stripe"
+	StoreNone      Store = ""
+)
+
 type Subscription struct {
-	ID               string             `json:"id"`
-	UserID           string             `json:"user_id"`
-	Plan             SubscriptionPlan   `json:"plan"`
-	Status           SubscriptionStatus `json:"status"`
-	StripeCustomerID string             `json:"stripe_customer_id,omitempty"`
-	StripeSubID      string             `json:"stripe_subscription_id,omitempty"`
-	CurrentPeriodEnd time.Time          `json:"current_period_end"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
-	CanceledAt       *time.Time         `json:"canceled_at,omitempty"`
+	ID     string             `json:"id"`
+	UserID string             `json:"user_id"`
+	Plan   SubscriptionPlan   `json:"plan"`
+	Status SubscriptionStatus `json:"status"`
+
+	// Stripe (web payments)
+	StripeCustomerID string `json:"stripe_customer_id,omitempty"`
+	StripeSubID      string `json:"stripe_subscription_id,omitempty"`
+
+	// RevenueCat (mobile payments)
+	RevenueCatCustomerID            string `json:"revenuecat_customer_id,omitempty"`
+	RevenueCatOriginalTransactionID string `json:"revenuecat_transaction_id,omitempty"`
+	Store                           Store  `json:"store,omitempty"`
+	ProductIdentifier               string `json:"product_identifier,omitempty"`
+
+	CurrentPeriodEnd time.Time  `json:"current_period_end"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CanceledAt       *time.Time `json:"canceled_at,omitempty"`
 }
 
 func NewSubscription(userID string, plan SubscriptionPlan) *Subscription {
@@ -46,6 +63,7 @@ func NewSubscription(userID string, plan SubscriptionPlan) *Subscription {
 		UserID:           userID,
 		Plan:             plan,
 		Status:           SubscriptionStatusActive,
+		Store:            StoreNone,
 		CurrentPeriodEnd: periodEnd,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -73,4 +91,34 @@ func (s *Subscription) Renew(periodEnd time.Time) {
 	s.CurrentPeriodEnd = periodEnd
 	s.Status = SubscriptionStatusActive
 	s.UpdatedAt = time.Now()
+}
+
+func (s *Subscription) Expire() {
+	s.Status = SubscriptionStatusExpired
+	s.UpdatedAt = time.Now()
+}
+
+// UpdateFromRevenueCat atualiza subscription com dados do RevenueCat
+func (s *Subscription) UpdateFromRevenueCat(
+	customerID string,
+	transactionID string,
+	productID string,
+	store Store,
+	expiresAt time.Time,
+	isActive bool,
+) {
+	s.RevenueCatCustomerID = customerID
+	s.RevenueCatOriginalTransactionID = transactionID
+	s.ProductIdentifier = productID
+	s.Store = store
+	s.CurrentPeriodEnd = expiresAt
+	s.UpdatedAt = time.Now()
+
+	if isActive {
+		s.Status = SubscriptionStatusActive
+		s.Plan = PlanPremium
+	} else {
+		s.Status = SubscriptionStatusExpired
+		s.Plan = PlanFree
+	}
 }

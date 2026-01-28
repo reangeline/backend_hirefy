@@ -50,7 +50,7 @@ func (s *authServiceImpl) SignUp(ctx context.Context, req inbound.SignUpRequest)
 
 	// 2. Criar usuário no DynamoDB
 	user := domain.NewUser(req.Email, req.Name, cognitoID)
-	user.ID = uuid.New().String()
+	user.ID = cognitoID
 	user.EmailVerified = false
 
 	if err := s.userRepo.Create(ctx, user); err != nil {

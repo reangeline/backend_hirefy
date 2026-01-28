@@ -69,6 +69,11 @@ func init() {
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)
 
+	revenueCatService := appservice.NewRevenueCatService(
+		subscriptionRepo,
+		userRepo,
+	)
+
 	// Inicializa router (inbound adapter)
 	router := httpAdapter.NewRouter(
 		authService,
@@ -76,6 +81,7 @@ func init() {
 		subscriptionService,
 		resumeService,
 		paymentService,
+		revenueCatService,
 	)
 
 	// Configura Lambda adapter
@@ -125,6 +131,12 @@ func runLocalServer() {
 
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
+
+	revenueCatService := appservice.NewRevenueCatService(
+		subscriptionRepo,
+		userRepo,
+	)
+
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)
 
 	router := httpAdapter.NewRouter(
@@ -133,6 +145,7 @@ func runLocalServer() {
 		subscriptionService,
 		resumeService,
 		paymentService,
+		revenueCatService,
 	)
 
 	port := os.Getenv("PORT")
