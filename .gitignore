@@ -10,6 +10,8 @@ bootstrap
 deployment.zip
 deployment-worker.zip
 
+firebase_credentials.json
+
 
 # Test
 *.test
