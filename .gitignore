@@ -1,0 +1,68 @@
+
+# .gitignore
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bootstrap
+deployment.zip
+deployment-worker.zip
+
+firebase_credentials.json
+
+
+# Test
+*.test
+*.out
+coverage.html
+
+# Output
+dist/
+build/
+
+# Dependency
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Logs
+*.log
+
+# Terraform
+*.tfvars
+!terraform.tfvars
+!*.tfvars.example
+secrets.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform secrets
+terraform/environments/*/secrets.tfvars
+terraform/environments/*/*.tfvars
+!terraform/environments/*/terraform.tfvars
+!terraform/environments/*/secrets.tfvars.example
+
+stripe-config.env
