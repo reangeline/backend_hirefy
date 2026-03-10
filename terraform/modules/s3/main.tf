@@ -45,7 +45,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "resumes" {
     }
 
     expiration {
-      days = 30  # Deleta arquivos com mais de 30 dias em DEV
+      days = 30 # Deleta arquivos com mais de 30 dias em DEV
     }
 
     noncurrent_version_expiration {

@@ -49,3 +49,21 @@ variable "revenuecat_webhook_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "lambda_timeout" {
+  description = "Lambda timeout in seconds"
+  type        = number
+  default     = 29
+}
+
+variable "sqs_queue_arns" {
+  description = "List of SQS queue ARNs the function can send messages to"
+  type        = list(string)
+  default     = []
+}
+
+variable "sqs_consume_arns" {
+  description = "List of SQS queue ARNs the function can consume messages from"
+  type        = list(string)
+  default     = []
+}

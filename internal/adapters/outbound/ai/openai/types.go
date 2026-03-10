@@ -2,10 +2,16 @@ package openai
 
 // OpenAIRequest representa uma requisição para a API do OpenAI
 type OpenAIRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature float64   `json:"temperature"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Temperature    float64         `json:"temperature"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+}
+
+// ResponseFormat enforces JSON output when set to "json_object"
+type ResponseFormat struct {
+	Type string `json:"type"`
 }
 
 // Message representa uma mensagem no chat

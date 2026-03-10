@@ -1,8 +1,8 @@
 resource "aws_dynamodb_table" "main" {
-  name           = var.table_name
-  billing_mode   = "PAY_PER_REQUEST"  # Free tier friendly
-  hash_key       = "PK"
-  range_key      = "SK"
+  name         = var.table_name
+  billing_mode = "PAY_PER_REQUEST" # Free tier friendly
+  hash_key     = "PK"
+  range_key    = "SK"
 
   attribute {
     name = "PK"

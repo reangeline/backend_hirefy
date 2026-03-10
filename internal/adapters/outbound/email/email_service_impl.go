@@ -141,6 +141,7 @@ Need help? Contact us at support@applywise.com
 	// Enviar email
 	result, err := s.client.SendEmail(ctx, input)
 	if err != nil {
+		fmt.Printf("❌ SES SendEmail error to %s: %v\n", toEmail, err)
 		return fmt.Errorf("failed to send email via SES: %w", err)
 	}
 

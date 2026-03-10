@@ -86,6 +86,48 @@ resource "aws_iam_role_policy" "lambda_ses" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_sqs" {
+  count = length(var.sqs_queue_arns) > 0 ? 1 : 0
+
+  name = "${var.function_name}-sqs-${var.environment}"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.sqs_queue_arns
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_sqs_consume" {
+  count = length(var.sqs_consume_arns) > 0 ? 1 : 0
+
+  name = "${var.function_name}-sqs-consume-${var.environment}"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = var.sqs_consume_arns
+      }
+    ]
+  })
+}
+
 resource "aws_lambda_function" "main" {
   function_name = "${var.function_name}-${var.environment}"
   role          = aws_iam_role.lambda.arn
@@ -93,7 +135,7 @@ resource "aws_lambda_function" "main" {
   runtime       = var.runtime
   filename      = var.source_file
   memory_size   = var.environment == "prod" ? 512 : 256
-  timeout       = var.environment == "prod" ? 30 : 15
+  timeout       = var.lambda_timeout
 
   source_code_hash = filebase64sha256(var.source_file)
 
@@ -108,5 +150,5 @@ resource "aws_lambda_function" "main" {
 
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${aws_lambda_function.main.function_name}"
-  retention_in_days = var.environment == "prod" ? 7 : 3  # Prod: 7 dias, Dev: 3 dias
+  retention_in_days = var.environment == "prod" ? 7 : 3 # Prod: 7 dias, Dev: 3 dias
 }

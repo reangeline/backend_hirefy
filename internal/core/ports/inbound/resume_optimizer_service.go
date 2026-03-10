@@ -16,6 +16,52 @@ type OptimizeResumeRequest struct {
 	UserID         string
 	ResumeID       string
 	JobDescription string
+	TargetCompany  string
+	TargetRole     string
+}
+
+// ProcessOptimizationJobRequest is consumed by async workers.
+type ProcessOptimizationJobRequest struct {
+	JobID          string
+	UserID         string
+	ResumeID       string
+	JobDescription string
+	TargetCompany  string
+	TargetRole     string
+}
+
+type CreateManualResumeRequest struct {
+	UserID     string
+	ResumeID   string // optional, if empty a new one will be generated
+	Nickname   string
+	ParsedData map[string]interface{}
+}
+
+type UpdateManualResumeRequest struct {
+	UserID     string
+	ResumeID   string
+	Nickname   string
+	ParsedData map[string]interface{}
+}
+
+type UpdateOptimizedResumeRequest struct {
+	UserID            string
+	OptimizedResumeID string
+	Nickname          string
+	ParsedData        map[string]interface{}
+}
+
+// StartLinkedInOptimizationRequest triggers an async LinkedIn optimization job.
+type StartLinkedInOptimizationRequest struct {
+	UserID   string
+	ResumeID string
+}
+
+// ProcessLinkedInOptimizationJobRequest is consumed by async workers.
+type ProcessLinkedInOptimizationJobRequest struct {
+	JobID    string
+	UserID   string
+	ResumeID string
 }
 
 // ResumeOptimizerService define os casos de uso de otimização de currículo
@@ -24,7 +70,17 @@ type ResumeOptimizerService interface {
 	GetResume(ctx context.Context, userID, resumeID string) (*domain.Resume, error)
 	ListResumes(ctx context.Context, userID string) ([]*domain.Resume, error)
 
-	OptimizeResume(ctx context.Context, req OptimizeResumeRequest) (*domain.OptimizedResume, error)
+	CreateManualResume(ctx context.Context, req CreateManualResumeRequest) (*domain.Resume, error)
+	UpdateManualResume(ctx context.Context, req UpdateManualResumeRequest) (*domain.Resume, error)
+	UpdateOptimizedResume(ctx context.Context, req UpdateOptimizedResumeRequest) (*domain.OptimizedResume, error)
+	DeleteResume(ctx context.Context, userID, resumeID string) error
+
+	StartOptimization(ctx context.Context, req OptimizeResumeRequest) (*domain.OptimizationJob, error)
+	ProcessOptimizationJob(ctx context.Context, req ProcessOptimizationJobRequest) (*domain.OptimizedResume, error)
+	GetOptimizationJob(ctx context.Context, userID, jobID string) (*domain.OptimizationJob, error)
 	GetOptimizedResume(ctx context.Context, userID, optimizedResumeID string) (*domain.OptimizedResume, error)
 	ListOptimizedResumes(ctx context.Context, userID string) ([]*domain.OptimizedResume, error)
+
+	StartLinkedInOptimization(ctx context.Context, req StartLinkedInOptimizationRequest) (*domain.OptimizationJob, error)
+	ProcessLinkedInOptimizationJob(ctx context.Context, req ProcessLinkedInOptimizationJobRequest) (*domain.OptimizedResume, error)
 }

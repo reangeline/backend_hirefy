@@ -42,6 +42,9 @@ type SubscriptionItem struct {
 	Store                           string `dynamodbav:"Store,omitempty"`
 	ProductIdentifier               string `dynamodbav:"ProductIdentifier,omitempty"`
 
+	// Credits
+	Credits int `dynamodbav:"Credits"`
+
 	CurrentPeriodEnd string  `dynamodbav:"CurrentPeriodEnd"`
 	CreatedAt        string  `dynamodbav:"CreatedAt"`
 	UpdatedAt        string  `dynamodbav:"UpdatedAt"`
@@ -77,6 +80,7 @@ func (r *subscriptionRepositoryImpl) Create(ctx context.Context, subscription *d
 		RevenueCatOriginalTransactionID: subscription.RevenueCatOriginalTransactionID,
 		Store:                           string(subscription.Store),
 		ProductIdentifier:               subscription.ProductIdentifier,
+		Credits:                         subscription.Credits,
 		CurrentPeriodEnd:                subscription.CurrentPeriodEnd.Format(time.RFC3339),
 		CreatedAt:                       subscription.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:                       subscription.UpdatedAt.Format(time.RFC3339),
@@ -199,7 +203,7 @@ func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *d
 
 	updateExpr := `SET #plan = :plan, #status = :status, #currentPeriodEnd = :currentPeriodEnd, 
 		#updatedAt = :updatedAt, #gsi2pk = :gsi2pk, #store = :store, #productId = :productId,
-		#rcCustomerId = :rcCustomerId, #rcTransactionId = :rcTransactionId`
+		#rcCustomerId = :rcCustomerId, #rcTransactionId = :rcTransactionId, #credits = :credits`
 
 	exprAttrNames := map[string]string{
 		"#plan":             "Plan",
@@ -211,6 +215,7 @@ func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *d
 		"#productId":        "ProductIdentifier",
 		"#rcCustomerId":     "RevenueCatCustomerID",
 		"#rcTransactionId":  "RevenueCatOriginalTransactionID",
+		"#credits":          "Credits",
 	}
 
 	exprAttrValues := map[string]types.AttributeValue{
@@ -223,6 +228,7 @@ func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *d
 		":productId":        &types.AttributeValueMemberS{Value: subscription.ProductIdentifier},
 		":rcCustomerId":     &types.AttributeValueMemberS{Value: subscription.RevenueCatCustomerID},
 		":rcTransactionId":  &types.AttributeValueMemberS{Value: subscription.RevenueCatOriginalTransactionID},
+		":credits":          &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", subscription.Credits)},
 	}
 
 	if canceledAt != nil {
@@ -281,6 +287,7 @@ func (r *subscriptionRepositoryImpl) itemToSubscription(item *SubscriptionItem) 
 		RevenueCatOriginalTransactionID: item.RevenueCatOriginalTransactionID,
 		Store:                           domain.Store(item.Store),
 		ProductIdentifier:               item.ProductIdentifier,
+		Credits:                         item.Credits,
 		CurrentPeriodEnd:                currentPeriodEnd,
 		CreatedAt:                       createdAt,
 		UpdatedAt:                       updatedAt,

@@ -11,20 +11,23 @@ import (
 )
 
 type subscriptionServiceImpl struct {
-	subscriptionRepo outbound.SubscriptionRepository
-	paymentGateway   outbound.PaymentGateway
-	userRepo         outbound.UserRepository
+	subscriptionRepo      outbound.SubscriptionRepository
+	paymentGateway        outbound.PaymentGateway
+	userRepo              outbound.UserRepository
+	creditTransactionRepo outbound.CreditTransactionRepository
 }
 
 func NewSubscriptionService(
 	subscriptionRepo outbound.SubscriptionRepository,
 	paymentGateway outbound.PaymentGateway,
 	userRepo outbound.UserRepository,
+	creditTransactionRepo outbound.CreditTransactionRepository,
 ) inbound.SubscriptionService {
 	return &subscriptionServiceImpl{
-		subscriptionRepo: subscriptionRepo,
-		paymentGateway:   paymentGateway,
-		userRepo:         userRepo,
+		subscriptionRepo:      subscriptionRepo,
+		paymentGateway:        paymentGateway,
+		userRepo:              userRepo,
+		creditTransactionRepo: creditTransactionRepo,
 	}
 }
 
@@ -153,4 +156,11 @@ func (s *subscriptionServiceImpl) getPriceIDForPlan(plan domain.SubscriptionPlan
 		domain.PlanPremium: "price_premium_monthly",
 	}
 	return priceIDs[plan]
+}
+
+func (s *subscriptionServiceImpl) GetCreditHistory(ctx context.Context, userID string, limit int) ([]*domain.CreditTransaction, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	return s.creditTransactionRepo.ListByUserID(ctx, userID, limit)
 }

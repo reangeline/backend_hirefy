@@ -25,4 +25,5 @@ type SubscriptionService interface {
 	UpdateSubscription(ctx context.Context, userID string, newPlan domain.SubscriptionPlan) (*domain.Subscription, error)
 	CheckSubscriptionStatus(ctx context.Context, userID string) (bool, error)
 	CreateCheckoutSession(ctx context.Context, req CreateCheckoutRequest) (string, error)
+	GetCreditHistory(ctx context.Context, userID string, limit int) ([]*domain.CreditTransaction, error)
 }

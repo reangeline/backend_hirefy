@@ -36,7 +36,10 @@ type UserItem struct {
 	Status           string `dynamodbav:"Status"`
 	CognitoID        string `dynamodbav:"CognitoID"`
 	StripeCustomerID string `dynamodbav:"StripeCustomerID,omitempty"`
+	FCMToken         string `dynamodbav:"FCMToken,omitempty"`
 	EmailVerified    bool   `dynamodbav:"EmailVerified"`
+	TermsAcceptedAt  string `dynamodbav:"TermsAcceptedAt,omitempty"`
+	TermsVersion     string `dynamodbav:"TermsVersion,omitempty"`
 	CreatedAt        string `dynamodbav:"CreatedAt"`
 	UpdatedAt        string `dynamodbav:"UpdatedAt"`
 }
@@ -56,9 +59,15 @@ func (r *userRepositoryImpl) Create(ctx context.Context, user *domain.User) erro
 		Status:           string(user.Status),
 		CognitoID:        user.CognitoID,
 		StripeCustomerID: user.StripeCustomerID,
+		FCMToken:         user.FCMToken,
 		EmailVerified:    user.EmailVerified,
 		CreatedAt:        user.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        user.UpdatedAt.Format(time.RFC3339),
+		TermsVersion:     user.TermsVersion,
+	}
+
+	if user.TermsAcceptedAt != nil {
+		item.TermsAcceptedAt = user.TermsAcceptedAt.Format(time.RFC3339)
 	}
 
 	av, err := attributevalue.MarshalMap(item)
@@ -156,13 +165,14 @@ func (r *userRepositoryImpl) GetByCognitoID(ctx context.Context, cognitoID strin
 }
 
 func (r *userRepositoryImpl) Update(ctx context.Context, user *domain.User) error {
-	updateExpr := "SET #name = :name, #status = :status, #stripeCustomerID = :stripeCustomerID, #emailVerified = :emailVerified, #updatedAt = :updatedAt"
+	updateExpr := "SET #name = :name, #status = :status, #stripeCustomerID = :stripeCustomerID, #emailVerified = :emailVerified, #fcmToken = :fcmToken, #updatedAt = :updatedAt"
 
 	exprAttrNames := map[string]string{
 		"#name":             "Name",
 		"#status":           "Status",
 		"#stripeCustomerID": "StripeCustomerID",
 		"#emailVerified":    "EmailVerified",
+		"#fcmToken":         "FCMToken",
 		"#updatedAt":        "UpdatedAt",
 	}
 
@@ -171,6 +181,7 @@ func (r *userRepositoryImpl) Update(ctx context.Context, user *domain.User) erro
 		":status":           &types.AttributeValueMemberS{Value: string(user.Status)},
 		":stripeCustomerID": &types.AttributeValueMemberS{Value: user.StripeCustomerID},
 		":emailVerified":    &types.AttributeValueMemberBOOL{Value: user.EmailVerified},
+		":fcmToken":         &types.AttributeValueMemberS{Value: user.FCMToken},
 		":updatedAt":        &types.AttributeValueMemberS{Value: user.UpdatedAt.Format(time.RFC3339)},
 	}
 
@@ -200,6 +211,33 @@ func (r *userRepositoryImpl) Delete(ctx context.Context, userID string) error {
 	return err
 }
 
+func (r *userRepositoryImpl) UpdateFCMToken(ctx context.Context, userID, token string) error {
+	updateExpr := "SET #fcmToken = :fcmToken, #updatedAt = :updatedAt"
+
+	exprAttrNames := map[string]string{
+		"#fcmToken":  "FCMToken",
+		"#updatedAt": "UpdatedAt",
+	}
+
+	exprAttrValues := map[string]types.AttributeValue{
+		":fcmToken":  &types.AttributeValueMemberS{Value: token},
+		":updatedAt": &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
+	}
+
+	_, err := r.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(r.client.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: fmt.Sprintf("USER#%s", userID)},
+			"SK": &types.AttributeValueMemberS{Value: "METADATA"},
+		},
+		UpdateExpression:          aws.String(updateExpr),
+		ExpressionAttributeNames:  exprAttrNames,
+		ExpressionAttributeValues: exprAttrValues,
+	})
+
+	return err
+}
+
 func (r *userRepositoryImpl) itemToUser(item *UserItem) (*domain.User, error) {
 	createdAt, err := time.Parse(time.RFC3339, item.CreatedAt)
 	if err != nil {
@@ -211,17 +249,27 @@ func (r *userRepositoryImpl) itemToUser(item *UserItem) (*domain.User, error) {
 		return nil, err
 	}
 
-	return &domain.User{
+	user := &domain.User{
 		ID:               item.ID,
 		Email:            item.Email,
 		Name:             item.Name,
 		Status:           domain.UserStatus(item.Status),
 		CognitoID:        item.CognitoID,
 		StripeCustomerID: item.StripeCustomerID,
+		FCMToken:         item.FCMToken,
 		EmailVerified:    item.EmailVerified,
+		TermsVersion:     item.TermsVersion,
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
-	}, nil
+	}
+
+	if item.TermsAcceptedAt != "" {
+		if t, err := time.Parse(time.RFC3339, item.TermsAcceptedAt); err == nil {
+			user.TermsAcceptedAt = &t
+		}
+	}
+
+	return user, nil
 }
 
 // Design de tabela única (Single Table Design):

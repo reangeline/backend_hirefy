@@ -1,5 +1,11 @@
 # ApplyWise Backend
 
+make build
+cd terraform/environments/dev
+terraform apply -var-file="secrets.tfvars" -target=module.lambda -auto-approve
+cd ../../..
+curl $API_URL/api/v1/health
+
 Backend service for ApplyWise - AI-powered resume optimization platform.
 
 ## Architecture

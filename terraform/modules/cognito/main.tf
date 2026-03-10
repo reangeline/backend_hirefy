@@ -1,8 +1,15 @@
+data "aws_caller_identity" "current" {}
+
+# Verificar o email no SES (receberá um email de confirmação da AWS)
+resource "aws_ses_email_identity" "from_email" {
+  email = var.ses_from_email
+}
+
 resource "aws_cognito_user_pool" "main" {
   name = "${var.app_name}-${var.environment}"
 
   username_attributes = ["email"]
-  
+
   # ❌ REMOVER auto_verified_attributes
   # Isso faz o Cognito enviar email automático
   # auto_verified_attributes = ["email"]
@@ -36,9 +43,11 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  # ✅ ADICIONAR: Configuração de email (sem SES por enquanto)
+  # ✅ Usar SES para envio de emails (sem limite diário, remetente personalizado)
   email_configuration {
-    email_sending_account = "COGNITO_DEFAULT"
+    email_sending_account = "DEVELOPER"
+    source_arn            = "arn:aws:ses:us-east-1:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}"
+    from_email_address    = var.ses_from_email
   }
 
   tags = {
@@ -68,4 +77,25 @@ resource "aws_cognito_user_pool_client" "main" {
     access_token  = "hours"
     id_token      = "hours"
   }
+}
+
+# Policy que autoriza o Cognito a enviar emails via SES usando esse remetente
+resource "aws_ses_identity_policy" "cognito_send_email" {
+  identity = aws_ses_email_identity.from_email.email
+  name     = "cognito-send-email"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCognitoToSendEmail"
+        Effect = "Allow"
+        Principal = {
+          Service = "email.cognito-idp.amazonaws.com"
+        }
+        Action   = "ses:SendEmail"
+        Resource = "arn:aws:ses:us-east-1:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}"
+      }
+    ]
+  })
 }

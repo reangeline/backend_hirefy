@@ -12,17 +12,20 @@ import (
 )
 
 type revenueCatServiceImpl struct {
-	subscriptionRepo outbound.SubscriptionRepository
-	userRepo         outbound.UserRepository
+	subscriptionRepo      outbound.SubscriptionRepository
+	userRepo              outbound.UserRepository
+	creditTransactionRepo outbound.CreditTransactionRepository
 }
 
 func NewRevenueCatService(
 	subscriptionRepo outbound.SubscriptionRepository,
 	userRepo outbound.UserRepository,
+	creditTransactionRepo outbound.CreditTransactionRepository,
 ) inbound.RevenueCatService {
 	return &revenueCatServiceImpl{
-		subscriptionRepo: subscriptionRepo,
-		userRepo:         userRepo,
+		subscriptionRepo:      subscriptionRepo,
+		userRepo:              userRepo,
+		creditTransactionRepo: creditTransactionRepo,
 	}
 }
 
@@ -189,7 +192,84 @@ func (s *revenueCatServiceImpl) handleExpiration(ctx context.Context, event map[
 }
 
 func (s *revenueCatServiceImpl) handleNonRenewingPurchase(ctx context.Context, event map[string]interface{}) error {
-	fmt.Printf("💰 Non-Renewing Purchase\n")
+	appUserID, _ := event["app_user_id"].(string) // CognitoID
+	productID, _ := event["product_id"].(string)
+	transactionID, _ := event["original_transaction_id"].(string)
+	entitlements, _ := event["entitlement_ids"].([]interface{})
+
+	fmt.Printf("💰 Non-Renewing Purchase - CognitoID: %s, Product: %s, TransactionID: %s\\n", appUserID, productID, transactionID)
+
+	// Verificar se tem entitlement de Credits
+	hasCredits := false
+	for _, ent := range entitlements {
+		if entStr, ok := ent.(string); ok && entStr == "Credits" {
+			hasCredits = true
+			break
+		}
+	}
+
+	if !hasCredits {
+		fmt.Printf("⚠️ No Credits entitlement, skipping\\n")
+		return nil
+	}
+
+	// Buscar usuário pelo CognitoID
+	user, err := s.userRepo.GetByCognitoID(ctx, appUserID)
+	if err != nil {
+		fmt.Printf("❌ User not found with CognitoID: %s (error: %v)\\n", appUserID, err)
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	fmt.Printf("✅ Found user: ID=%s, Email=%s\\n", user.ID, user.Email)
+
+	// Buscar subscription do usuário
+	subscription, err := s.subscriptionRepo.GetByUserID(ctx, user.ID)
+	if err != nil {
+		fmt.Printf("❌ Subscription not found for user: %s (error: %v)\\n", user.ID, err)
+		return fmt.Errorf("subscription not found: %w", err)
+	}
+
+	// Mapear product_id para quantidade de créditos
+	creditsToAdd := 0
+	switch productID {
+	case "credits_5":
+		creditsToAdd = 5
+	case "credits_10":
+		creditsToAdd = 10
+	case "credits_20":
+		creditsToAdd = 20
+	default:
+		fmt.Printf("⚠️ Unknown credits product: %s\\n", productID)
+		return fmt.Errorf("unknown credits product: %s", productID)
+	}
+
+	fmt.Printf("💳 Adding %d credits to user %s (current: %d)\\n", creditsToAdd, user.Email, subscription.Credits)
+
+	// Adicionar créditos
+	subscription.AddCredits(creditsToAdd)
+
+	// Registrar transação
+	transaction := domain.NewCreditTransaction(
+		user.ID,
+		creditsToAdd,
+		domain.CreditTransactionTypeAdd,
+		fmt.Sprintf("Purchase: %s", productID),
+	)
+	transaction.Metadata["product_id"] = productID
+	transaction.Metadata["transaction_id"] = transactionID
+
+	if err := s.creditTransactionRepo.Create(ctx, transaction); err != nil {
+		fmt.Printf("⚠️ Failed to record transaction: %v\\n", err)
+		// Não falhar a operação se o log falhar
+	}
+
+	// Salvar subscription atualizada
+	if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
+		fmt.Printf("❌ Failed to update subscription: %v\\n", err)
+		return fmt.Errorf("failed to update subscription: %w", err)
+	}
+
+	fmt.Printf("✅ Successfully added %d credits! Total credits: %d\\n", creditsToAdd, subscription.Credits)
 	return nil
 }
 

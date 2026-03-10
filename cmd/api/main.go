@@ -16,8 +16,10 @@ import (
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/ai/openai"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/auth/cognito"
 	emailadapter "github.com/reangeline/backend_applywise/internal/adapters/outbound/email" // ✅ ADICIONAR
+	fcmpublisher "github.com/reangeline/backend_applywise/internal/adapters/outbound/notification/fcm"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/payment/stripe"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/persistence/dynamodb"
+	queue "github.com/reangeline/backend_applywise/internal/adapters/outbound/queue/sqs"
 	appservice "github.com/reangeline/backend_applywise/internal/application/service"
 	appconfig "github.com/reangeline/backend_applywise/pkg/config"
 )
@@ -41,7 +43,14 @@ func init() {
 	userRepo := dynamodb.NewUserRepository(dynamoClient)
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
 	resumeRepo := dynamodb.NewResumeRepository(dynamoClient)
-	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient) // ✅ ADICIONAR
+	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient)           // ✅ ADICIONAR
+	creditTransactionRepo := dynamodb.NewCreditTransactionRepository(dynamoClient) // ✅ NOVO
+	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
+	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
+	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
+	if err != nil {
+		log.Printf("warning: failed to init FCM notifier: %v", err)
+	}
 
 	emailService := emailadapter.NewEmailService(emailadapter.EmailConfig{
 		Client:    sesClient,
@@ -55,7 +64,7 @@ func init() {
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
 
 	// Inicializa services (application layer)
-	userService := appservice.NewUserService(userRepo)
+	userService := appservice.NewUserService(userRepo, cognitoClient)
 
 	authService := appservice.NewAuthService(
 		cognitoClient,
@@ -65,13 +74,14 @@ func init() {
 		emailService,
 	)
 
-	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo)
+	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
-	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)
+	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
 		userRepo,
+		creditTransactionRepo,
 	)
 
 	// Inicializa router (inbound adapter)
@@ -113,9 +123,16 @@ func runLocalServer() {
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
 	resumeRepo := dynamodb.NewResumeRepository(dynamoClient)
 	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient)
+	creditTransactionRepo := dynamodb.NewCreditTransactionRepository(dynamoClient)
+	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
+	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
+	if err != nil {
+		log.Printf("warning: failed to init FCM notifier: %v", err)
+	}
 
 	sesClient := sesv2.NewFromConfig(awsCfg)
 
@@ -126,18 +143,19 @@ func runLocalServer() {
 		IsDev:     os.Getenv("ENVIRONMENT") == "dev",
 	})
 
-	userService := appservice.NewUserService(userRepo)
+	userService := appservice.NewUserService(userRepo, cognitoClient)
 	authService := appservice.NewAuthService(cognitoClient, userRepo, subscriptionRepo, verificationRepo, emailService)
 
-	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo)
+	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
 		userRepo,
+		creditTransactionRepo,
 	)
 
-	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo)
+	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -161,11 +179,14 @@ func runLocalServer() {
 
 func loadConfig() *appconfig.Config {
 	return &appconfig.Config{
-		DynamoDBTable:       os.Getenv("DYNAMODB_TABLE"),
-		CognitoUserPoolID:   os.Getenv("COGNITO_USER_POOL_ID"),
-		CognitoClientID:     os.Getenv("COGNITO_CLIENT_ID"),
-		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
-		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
+		DynamoDBTable:        os.Getenv("DYNAMODB_TABLE"),
+		CognitoUserPoolID:    os.Getenv("COGNITO_USER_POOL_ID"),
+		CognitoClientID:      os.Getenv("COGNITO_CLIENT_ID"),
+		StripeSecretKey:      os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret:  os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),
+		OptimizationQueueURL: os.Getenv("OPTIMIZATION_QUEUE_URL"),
+		FirebaseCredentials:  os.Getenv("FIREBASE_CREDENTIALS_FILE"),
+		FirebaseProjectID:    os.Getenv("FIREBASE_PROJECT_ID"),
 	}
 }

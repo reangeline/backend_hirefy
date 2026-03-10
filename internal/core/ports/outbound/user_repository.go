@@ -13,5 +13,6 @@ type UserRepository interface {
 	GetByCognitoID(ctx context.Context, cognitoID string) (*domain.User, error)
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
 	Update(ctx context.Context, user *domain.User) error
+	UpdateFCMToken(ctx context.Context, userID, token string) error
 	Delete(ctx context.Context, userID string) error
 }

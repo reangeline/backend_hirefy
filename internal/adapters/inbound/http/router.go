@@ -67,8 +67,8 @@ func NewRouter(
 		r.Post("/auth/refresh", authHandler.RefreshToken)
 		r.Post("/auth/confirm", authHandler.ConfirmSignUp)
 		r.Post("/auth/resend-code", authHandler.ResendCode)
-
-		// Webhooks (públicos mas com validação de signature)
+		r.Post("/auth/forgot-password", authHandler.ForgotPassword)
+		r.Post("/auth/confirm-forgot-password", authHandler.ConfirmForgotPassword)
 		r.Post("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
 		r.Post("/webhooks/revenuecat", revenueCatWebhookHandler.HandleWebhook) // ✅ ADICIONAR
 
@@ -77,17 +77,30 @@ func NewRouter(
 			r.Use(middleware.AuthMiddleware(authService, userService))
 
 			r.Post("/resumes", resumeHandler.UploadResume)
+			r.Post("/resumes/manual", resumeHandler.CreateManualResume)
 			r.Get("/resumes", resumeHandler.ListResumes)
 			r.Get("/resumes/{resumeID}", resumeHandler.GetResume)
+			r.Put("/resumes/manual/{resumeID}", resumeHandler.UpdateManualResume)
 			r.Post("/resumes/optimize", resumeHandler.OptimizeResume)
 			r.Get("/resumes/optimized", resumeHandler.ListOptimizedResumes)
+			r.Get("/resumes/optimized/{optimizedID}", resumeHandler.GetOptimizedResume)
+			r.Put("/resumes/optimized/{optimizedID}", resumeHandler.UpdateOptimizedResume)
+			r.Delete("/resumes/{resumeID}", resumeHandler.DeleteResume)
+
+			r.Get("/resumes/optimize/jobs/{jobID}", resumeHandler.GetOptimizationJobStatus)
+
+			// LinkedIn optimization
+			r.Post("/resumes/linkedin/optimize", resumeHandler.OptimizeForLinkedIn)
 
 			r.Get("/subscription", subscriptionHandler.GetSubscription)
 			r.Post("/subscription", subscriptionHandler.CreateSubscription)
 			r.Post("/subscription/checkout", subscriptionHandler.CreateCheckout)
 			r.Delete("/subscription", subscriptionHandler.CancelSubscription)
+			r.Get("/subscription/credits", subscriptionHandler.GetCredits)
 
 			r.Get("/users/me", userHandler.GetMe)
+			r.Post("/users/me/fcm-token", userHandler.UpdateFCMToken)
+			r.Delete("/users/me", userHandler.DeleteMe)
 		})
 	})
 

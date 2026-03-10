@@ -44,6 +44,9 @@ type Subscription struct {
 	Store                           Store  `json:"store,omitempty"`
 	ProductIdentifier               string `json:"product_identifier,omitempty"`
 
+	// Credits system (for non-renewing purchases)
+	Credits int `json:"credits"`
+
 	CurrentPeriodEnd time.Time  `json:"current_period_end"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -64,6 +67,7 @@ func NewSubscription(userID string, plan SubscriptionPlan) *Subscription {
 		Plan:             plan,
 		Status:           SubscriptionStatusActive,
 		Store:            StoreNone,
+		Credits:          1, // Usuário começa com 1 crédito grátis
 		CurrentPeriodEnd: periodEnd,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -71,6 +75,12 @@ func NewSubscription(userID string, plan SubscriptionPlan) *Subscription {
 }
 
 func (s *Subscription) IsActive() bool {
+	// Para plano FREE com créditos, permite uso mesmo se expirado (créditos não expiram)
+	if s.Plan == PlanFree && s.Credits > 0 {
+		return true
+	}
+
+	// Para planos pagos (Basic/Premium), valida status e período
 	return s.Status == SubscriptionStatusActive &&
 		time.Now().Before(s.CurrentPeriodEnd)
 }
@@ -96,6 +106,22 @@ func (s *Subscription) Renew(periodEnd time.Time) {
 func (s *Subscription) Expire() {
 	s.Status = SubscriptionStatusExpired
 	s.UpdatedAt = time.Now()
+}
+
+// AddCredits adiciona créditos à conta do usuário
+func (s *Subscription) AddCredits(amount int) {
+	s.Credits += amount
+	s.UpdatedAt = time.Now()
+}
+
+// UseCredit decrementa um crédito (retorna erro se não houver créditos)
+func (s *Subscription) UseCredit() error {
+	if s.Credits <= 0 {
+		return ErrInsufficientCredits
+	}
+	s.Credits--
+	s.UpdatedAt = time.Now()
+	return nil
 }
 
 // UpdateFromRevenueCat atualiza subscription com dados do RevenueCat

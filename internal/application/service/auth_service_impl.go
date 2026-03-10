@@ -53,6 +53,15 @@ func (s *authServiceImpl) SignUp(ctx context.Context, req inbound.SignUpRequest)
 	user.ID = cognitoID
 	user.EmailVerified = false
 
+	// Salvar consentimento dos termos
+	if req.TermsAcceptedAt != "" {
+		parsedTime, err := time.Parse(time.RFC3339, req.TermsAcceptedAt)
+		if err == nil {
+			user.TermsAcceptedAt = &parsedTime
+		}
+	}
+	user.TermsVersion = req.TermsVersion
+
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create local user: %w", err)
 	}
@@ -214,4 +223,18 @@ func (s *authServiceImpl) ResendConfirmationCode(ctx context.Context, req inboun
 	}
 
 	return nil
+}
+
+func (s *authServiceImpl) ForgotPassword(ctx context.Context, req inbound.ForgotPasswordRequest) error {
+	if req.Email == "" {
+		return fmt.Errorf("email is required")
+	}
+	return s.authProvider.ForgotPassword(ctx, req.Email)
+}
+
+func (s *authServiceImpl) ConfirmForgotPassword(ctx context.Context, req inbound.ConfirmForgotPasswordRequest) error {
+	if req.Email == "" || req.Code == "" || req.NewPassword == "" {
+		return fmt.Errorf("email, code and new_password are required")
+	}
+	return s.authProvider.ConfirmForgotPassword(ctx, req.Email, req.Code, req.NewPassword)
 }

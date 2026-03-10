@@ -19,7 +19,10 @@ type User struct {
 	Status           UserStatus `json:"status"`
 	CognitoID        string     `json:"cognito_id"`
 	StripeCustomerID string     `json:"stripe_customer_id,omitempty"`
+	FCMToken         string     `json:"fcm_token,omitempty"`
 	EmailVerified    bool       `json:"email_verified"`
+	TermsAcceptedAt  *time.Time `json:"terms_accepted_at,omitempty"`
+	TermsVersion     string     `json:"terms_version,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 }

@@ -6,9 +6,14 @@ deps:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # Build para Lambda
-build:
+build: build-worker
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/api/main.go
-	zip deployment.zip bootstrap
+	zip deployment.zip bootstrap firebase_credentials.json
+
+# Build worker Lambda
+build-worker:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/worker/main.go
+	zip deployment-worker.zip bootstrap firebase_credentials.json
 
 # Build local
 build-local:

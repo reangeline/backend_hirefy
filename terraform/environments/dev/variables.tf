@@ -55,11 +55,40 @@ variable "stripe_pro_price_id" {
 variable "ses_from_email" {
   description = "Email to send from"
   type        = string
-  default     = "reangeline@hotmail.com"
+  default     = "contact@hirefy.careers"
 }
 
 variable "revenuecat_webhook_secret" {
   description = "RevenueCat webhook secret"
   type        = string
-  default     = ""  # Vazio por enquanto, vamos configurar depois
+  default     = "" # Vazio por enquanto, vamos configurar depois
+}
+
+variable "revenuecat_api_key" {
+  description = "RevenueCat API key (unused for now)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_domain_prefix" {
+  description = "Cognito domain prefix (unused for now)"
+  type        = string
+  default     = ""
+}
+
+variable "optimization_queue_name" {
+  description = "SQS queue name for async resume optimization"
+  type        = string
+  default     = "applywise-optimization-dev"
+}
+
+variable "firebase_credentials_file" {
+  description = "Path to Firebase service account JSON inside the Lambda package or layer"
+  type        = string
+}
+
+variable "firebase_project_id" {
+  description = "Firebase project ID (used to init FCM)"
+  type        = string
+  default     = ""
 }

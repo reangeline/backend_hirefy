@@ -130,3 +130,27 @@ func (h *SubscriptionHandler) CreateCheckout(w http.ResponseWriter, r *http.Requ
 		"checkout_url": checkoutURL,
 	})
 }
+
+func (h *SubscriptionHandler) GetCredits(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(string)
+
+	// Buscar subscription para obter saldo de créditos
+	subscription, err := h.subscriptionService.GetSubscriptionByUserID(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "subscription not found")
+		return
+	}
+
+	// Buscar histórico de transações (últimas 50)
+	transactions, err := h.subscriptionService.GetCreditHistory(r.Context(), userID, 50)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get credit history")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"credits":      subscription.Credits,
+		"plan":         subscription.Plan,
+		"transactions": transactions,
+	})
+}

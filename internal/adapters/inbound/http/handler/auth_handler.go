@@ -21,9 +21,11 @@ func NewAuthHandler(authService inbound.AuthService, userService inbound.UserSer
 }
 
 type SignUpRequestDTO struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8"`
-	Name     string `json:"name" validate:"required"`
+	Email           string `json:"email" validate:"required,email"`
+	Password        string `json:"password" validate:"required,min=8"`
+	Name            string `json:"name" validate:"required"`
+	TermsAcceptedAt string `json:"terms_accepted_at"`
+	TermsVersion    string `json:"terms_version"`
 }
 
 type SignInRequestDTO struct {
@@ -40,9 +42,11 @@ func (h *AuthHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	// O authService.SignUp já cria o usuário no Cognito E no DynamoDB
 	authResp, err := h.authService.SignUp(r.Context(), inbound.SignUpRequest{
-		Email:    req.Email,
-		Password: req.Password,
-		Name:     req.Name,
+		Email:           req.Email,
+		Password:        req.Password,
+		Name:            req.Name,
+		TermsAcceptedAt: req.TermsAcceptedAt,
+		TermsVersion:    req.TermsVersion,
 	})
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -176,7 +180,75 @@ func parseAuthError(err error) (statusCode int, errorType string, message string
 	case strings.Contains(errMsg, "email is required"), strings.Contains(errMsg, "confirmation code is required"):
 		return http.StatusBadRequest, "InvalidRequest", errMsg
 
+	case strings.Contains(errMsg, "failed to send email"):
+		return http.StatusInternalServerError, "EmailDeliveryError", "Failed to send verification email. Please try again later."
+
+	case strings.Contains(errMsg, "user not found"):
+		return http.StatusNotFound, "UserNotFound", "No account found with that email address"
+
+	case strings.Contains(errMsg, "email already verified"):
+		return http.StatusBadRequest, "AlreadyVerified", "This email is already verified"
+
+	case strings.Contains(errMsg, "failed to create verification code"):
+		return http.StatusInternalServerError, "InternalError", "Failed to generate verification code. Please try again."
+
 	default:
 		return http.StatusInternalServerError, "InternalError", "An unexpected error occurred"
 	}
+}
+
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.authService.ForgotPassword(r.Context(), inbound.ForgotPasswordRequest{
+		Email: req.Email,
+	}); err != nil {
+		statusCode, errorType, message := parseAuthError(err)
+		respondJSON(w, statusCode, map[string]string{
+			"error":   errorType,
+			"message": message,
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": "Password reset code sent to your email",
+	})
+}
+
+func (h *AuthHandler) ConfirmForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email       string `json:"email"`
+		Code        string `json:"code"`
+		NewPassword string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.authService.ConfirmForgotPassword(r.Context(), inbound.ConfirmForgotPasswordRequest{
+		Email:       req.Email,
+		Code:        req.Code,
+		NewPassword: req.NewPassword,
+	}); err != nil {
+		statusCode, errorType, message := parseAuthError(err)
+		respondJSON(w, statusCode, map[string]string{
+			"error":   errorType,
+			"message": message,
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": "Password reset successfully",
+	})
 }

@@ -51,9 +51,14 @@ func (a *authProviderImpl) SignUp(ctx context.Context, email, password, name str
 		return "", fmt.Errorf("failed to sign up: %w", err)
 	}
 
-	// Auto-confirma o usuário (apenas para dev - em prod use email verification)
+	// Auto-confirma o usuário
 	if err := a.confirmUser(ctx, email); err != nil {
 		return "", fmt.Errorf("failed to confirm user: %w", err)
+	}
+
+	// Marca email como verificado no Cognito (necessário para ForgotPassword funcionar)
+	if err := a.MarkEmailAsVerified(ctx, email); err != nil {
+		fmt.Printf("⚠️ Warning: failed to mark email as verified during signup: %v\n", err)
 	}
 
 	return *result.UserSub, nil
@@ -226,6 +231,38 @@ func (a *authProviderImpl) handleCognitoError(err error) error {
 	}
 }
 
+// ForgotPassword inicia o fluxo de reset de senha via Cognito
+func (a *authProviderImpl) ForgotPassword(ctx context.Context, email string) error {
+	input := &cognitoidentityprovider.ForgotPasswordInput{
+		ClientId: aws.String(a.clientID),
+		Username: aws.String(email),
+	}
+
+	_, err := a.client.ForgotPassword(ctx, input)
+	if err != nil {
+		return a.handleCognitoError(err)
+	}
+
+	return nil
+}
+
+// ConfirmForgotPassword confirma o novo password com o código recebido
+func (a *authProviderImpl) ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error {
+	input := &cognitoidentityprovider.ConfirmForgotPasswordInput{
+		ClientId:         aws.String(a.clientID),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(code),
+		Password:         aws.String(newPassword),
+	}
+
+	_, err := a.client.ConfirmForgotPassword(ctx, input)
+	if err != nil {
+		return a.handleCognitoError(err)
+	}
+
+	return nil
+}
+
 func (a *authProviderImpl) MarkEmailAsVerified(ctx context.Context, email string) error {
 	input := &cognitoidentityprovider.AdminUpdateUserAttributesInput{
 		UserPoolId: aws.String(a.userPoolID),
@@ -244,5 +281,20 @@ func (a *authProviderImpl) MarkEmailAsVerified(ctx context.Context, email string
 	}
 
 	fmt.Printf("✅ Cognito: email_verified set to true for %s\n", email)
+	return nil
+}
+
+// DeleteUser permanently removes a user from the Cognito user pool
+func (a *authProviderImpl) DeleteUser(ctx context.Context, email string) error {
+	input := &cognitoidentityprovider.AdminDeleteUserInput{
+		UserPoolId: aws.String(a.userPoolID),
+		Username:   aws.String(email),
+	}
+
+	_, err := a.client.AdminDeleteUser(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to delete user from Cognito: %w", err)
+	}
+
 	return nil
 }

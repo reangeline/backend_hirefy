@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
@@ -10,13 +11,15 @@ import (
 )
 
 type userServiceImpl struct {
-	userRepo outbound.UserRepository
+	userRepo     outbound.UserRepository
+	authProvider outbound.AuthProvider
 }
 
 // NewUserService cria nova instância do serviço de usuários
-func NewUserService(userRepo outbound.UserRepository) inbound.UserService {
+func NewUserService(userRepo outbound.UserRepository, authProvider outbound.AuthProvider) inbound.UserService {
 	return &userServiceImpl{
-		userRepo: userRepo,
+		userRepo:     userRepo,
+		authProvider: authProvider,
 	}
 }
 
@@ -60,6 +63,20 @@ func (s *userServiceImpl) UpdateUser(ctx context.Context, userID string, name st
 	return user, nil
 }
 
+func (s *userServiceImpl) UpdateFCMToken(ctx context.Context, userID, token string) error {
+	return s.userRepo.UpdateFCMToken(ctx, userID, token)
+}
+
 func (s *userServiceImpl) DeleteUser(ctx context.Context, userID string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete from Cognito first so the account cannot be used after this call
+	if err := s.authProvider.DeleteUser(ctx, user.Email); err != nil {
+		return fmt.Errorf("failed to delete auth account: %w", err)
+	}
+
 	return s.userRepo.Delete(ctx, userID)
 }

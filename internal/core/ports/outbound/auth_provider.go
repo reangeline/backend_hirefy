@@ -13,4 +13,7 @@ type AuthProvider interface {
 	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
 	ResendConfirmationCode(ctx context.Context, email string) error
 	MarkEmailAsVerified(ctx context.Context, email string) error
+	ForgotPassword(ctx context.Context, email string) error
+	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
+	DeleteUser(ctx context.Context, email string) error
 }
