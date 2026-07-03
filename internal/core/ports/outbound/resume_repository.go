@@ -18,6 +18,6 @@ type ResumeRepository interface {
 
 	CreateOptimizedResume(ctx context.Context, optimized *domain.OptimizedResume) error
 	UpdateOptimizedResume(ctx context.Context, optimized *domain.OptimizedResume) error
-	GetOptimizedResume(ctx context.Context, optimizedID string) (*domain.OptimizedResume, error)
+	GetOptimizedResume(ctx context.Context, userID, optimizedID string) (*domain.OptimizedResume, error)
 	ListOptimizedResumesByUserID(ctx context.Context, userID string) ([]*domain.OptimizedResume, error)
 }

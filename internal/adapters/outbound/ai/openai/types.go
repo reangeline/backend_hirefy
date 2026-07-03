@@ -16,8 +16,9 @@ type ResponseFormat struct {
 
 // Message representa uma mensagem no chat
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string  `json:"role"`
+	Content string  `json:"content"`
+	Refusal *string `json:"refusal,omitempty"`
 }
 
 // OpenAIResponse representa a resposta da API do OpenAI

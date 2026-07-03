@@ -10,6 +10,7 @@ import (
 	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/handler"
 	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/middleware"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
+	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
 )
 
 func NewRouter(
@@ -18,12 +19,24 @@ func NewRouter(
 	subscriptionService inbound.SubscriptionService,
 	resumeService inbound.ResumeOptimizerService,
 	paymentService inbound.PaymentService,
-	revenueCatService inbound.RevenueCatService, // ✅ ADICIONAR
+	revenueCatService inbound.RevenueCatService,
+	pipelineRepo outbound.PipelineRepository,
+	contactRepo outbound.ContactRepository,
+	userRepo outbound.UserRepository,
+	notifier outbound.NotificationPublisher,
+	pipelineCoachService inbound.PipelineCoachService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	// Limit request bodies to 2 MB to prevent payload-flooding attacks.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 2<<20) // 2 MiB
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,8 +60,9 @@ func NewRouter(
 	resumeHandler := handler.NewResumeHandler(resumeService)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handler.NewWebhookHandler(paymentService)
-	revenueCatWebhookHandler := handler.NewRevenueCatWebhookHandler(revenueCatService) // ✅ ADICIONAR
+	revenueCatWebhookHandler := handler.NewRevenueCatWebhookHandler(revenueCatService)
 	userHandler := handler.NewUserHandler(userService)
+	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -64,6 +78,7 @@ func NewRouter(
 		// Públicas
 		r.Post("/auth/signup", authHandler.SignUp)
 		r.Post("/auth/signin", authHandler.SignIn)
+		r.Post("/auth/social", authHandler.SocialSignIn)
 		r.Post("/auth/refresh", authHandler.RefreshToken)
 		r.Post("/auth/confirm", authHandler.ConfirmSignUp)
 		r.Post("/auth/resend-code", authHandler.ResendCode)
@@ -71,6 +86,7 @@ func NewRouter(
 		r.Post("/auth/confirm-forgot-password", authHandler.ConfirmForgotPassword)
 		r.Post("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
 		r.Post("/webhooks/revenuecat", revenueCatWebhookHandler.HandleWebhook) // ✅ ADICIONAR
+		r.Post("/resumes/parse-pdf", resumeHandler.ParsePDFResume)
 
 		// Protegidas
 		r.Group(func(r chi.Router) {
@@ -99,8 +115,24 @@ func NewRouter(
 			r.Get("/subscription/credits", subscriptionHandler.GetCredits)
 
 			r.Get("/users/me", userHandler.GetMe)
+			r.Patch("/users/me", userHandler.UpdateMe)
 			r.Post("/users/me/fcm-token", userHandler.UpdateFCMToken)
 			r.Delete("/users/me", userHandler.DeleteMe)
+
+			// Pipeline (job application tracking)
+			r.Get("/pipeline", pipelineHandler.ListJobs)
+			r.Post("/pipeline", pipelineHandler.CreateJob)
+			r.Get("/pipeline/{jobId}", pipelineHandler.GetJob)
+			r.Put("/pipeline/{jobId}", pipelineHandler.UpdateJob)
+			r.Delete("/pipeline/{jobId}", pipelineHandler.DeleteJob)
+			r.Post("/pipeline/{jobId}/ghost", pipelineHandler.GhostJob)
+			r.Post("/pipeline/{jobId}/interview", pipelineHandler.LogInterview)
+			r.Post("/pipeline/{jobId}/followup", pipelineHandler.LogFollowUp)
+			r.Post("/pipeline/{jobId}/coach", pipelineHandler.Coach)
+			r.Get("/pipeline/analytics", pipelineHandler.GetPipelineAnalytics)
+			r.Get("/pipeline/{jobId}/contacts", pipelineHandler.ListContacts)
+			r.Post("/pipeline/{jobId}/contacts", pipelineHandler.AddContact)
+			r.Delete("/pipeline/{jobId}/contacts/{contactId}", pipelineHandler.DeleteContact)
 		})
 	})
 

@@ -1,17 +1,21 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ledongthuc/pdf"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
+	"github.com/reangeline/backend_applywise/pkg/security"
 )
 
 type resumeOptimizerServiceImpl struct {
@@ -55,6 +59,12 @@ func (s *resumeOptimizerServiceImpl) UploadResume(
 	ctx context.Context,
 	req inbound.UploadResumeRequest,
 ) (*domain.Resume, error) {
+	// Validate resume content against prompt injection and size limits
+	if err := security.ValidateResumeContent(security.SanitizeForPrompt(req.Content)); err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidResume, err)
+	}
+	req.Content = security.SanitizeForPrompt(req.Content)
+
 	// Parse do currículo usando IA
 	analysis, err := s.aiService.ParseResume(ctx, req.Content)
 	if err != nil {
@@ -137,7 +147,9 @@ func (s *resumeOptimizerServiceImpl) ProcessOptimizationJob(ctx context.Context,
 
 	_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusCompleted, "", optimized.ID)
 	if s.notifier != nil {
-		_ = s.notifier.NotifyResumeOptimized(ctx, req.UserID, req.JobID, optimized.ID)
+		if err := s.notifier.NotifyResumeOptimized(ctx, req.UserID, req.JobID, optimized.ID); err != nil {
+			log.Printf("[notify] resume optimization push failed: userID=%s jobID=%s optimizedID=%s err=%v", req.UserID, req.JobID, optimized.ID, err)
+		}
 	}
 
 	return optimized, nil
@@ -183,6 +195,22 @@ func (s *resumeOptimizerServiceImpl) runOptimization(
 	if resume == nil {
 		return nil, domain.ErrResumeNotFound
 	}
+
+	// Validate job description and short fields before sending to AI
+	if err := security.ValidateJobDescription(security.SanitizeForPrompt(req.JobDescription)); err != nil {
+		return nil, err
+	}
+	if req.TargetCompany != "" {
+		if err := security.ValidateShortField(req.TargetCompany, "target company"); err != nil {
+			return nil, err
+		}
+	}
+	if req.TargetRole != "" {
+		if err := security.ValidateShortField(req.TargetRole, "target role"); err != nil {
+			return nil, err
+		}
+	}
+	req.JobDescription = security.SanitizeForPrompt(req.JobDescription)
 
 	// Parse da job description
 	jobAnalysis, err := s.aiService.ParseJobDescription(ctx, req.JobDescription)
@@ -430,13 +458,9 @@ func (s *resumeOptimizerServiceImpl) DeleteResume(ctx context.Context, userID, r
 }
 
 func (s *resumeOptimizerServiceImpl) GetOptimizedResume(ctx context.Context, userID, optimizedResumeID string) (*domain.OptimizedResume, error) {
-	optimized, err := s.resumeRepo.GetOptimizedResume(ctx, optimizedResumeID)
+	optimized, err := s.resumeRepo.GetOptimizedResume(ctx, userID, optimizedResumeID)
 	if err != nil {
 		return nil, err
-	}
-
-	if optimized.UserID != userID {
-		return nil, domain.ErrForbidden
 	}
 
 	return optimized, nil
@@ -586,7 +610,9 @@ func (s *resumeOptimizerServiceImpl) ProcessLinkedInOptimizationJob(
 	_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusCompleted, "", optimized.ID)
 
 	if s.notifier != nil {
-		_ = s.notifier.NotifyResumeOptimized(ctx, req.UserID, req.JobID, optimized.ID)
+		if err := s.notifier.NotifyLinkedInOptimized(ctx, req.UserID, req.JobID, optimized.ID); err != nil {
+			log.Printf("[notify] linkedin optimization push failed: userID=%s jobID=%s optimizedID=%s err=%v", req.UserID, req.JobID, optimized.ID, err)
+		}
 	}
 
 	return optimized, nil
@@ -595,6 +621,14 @@ func (s *resumeOptimizerServiceImpl) ProcessLinkedInOptimizationJob(
 type noopNotificationPublisher struct{}
 
 func (noopNotificationPublisher) NotifyResumeOptimized(ctx context.Context, userID, jobID, optimizedResumeID string) error {
+	return nil
+}
+
+func (noopNotificationPublisher) NotifyLinkedInOptimized(ctx context.Context, userID, jobID, optimizedResumeID string) error {
+	return nil
+}
+
+func (noopNotificationPublisher) NotifyInterviewScheduled(ctx context.Context, userID, jobID, companyName, interviewType, interviewAt string) error {
 	return nil
 }
 
@@ -984,4 +1018,66 @@ func augmentSuggestionsWithGaps(existing []string, missing []string) []string {
 	}
 
 	return result
+}
+
+// extractTextFromPDF reads plain text from PDF bytes using ledongthuc/pdf.
+// Returns the extracted text, or an error if extraction fails.
+func extractTextFromPDF(data []byte) (string, error) {
+	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", fmt.Errorf("failed to read PDF: %w", err)
+	}
+
+	var sb strings.Builder
+	for i := 1; i <= r.NumPage(); i++ {
+		page := r.Page(i)
+		if page.V.IsNull() {
+			continue
+		}
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			continue // skip pages we cannot read
+		}
+		sb.WriteString(text)
+		sb.WriteString("\n")
+	}
+
+	result := strings.TrimSpace(sb.String())
+	if result == "" {
+		return "", fmt.Errorf("no readable text found in PDF — the file may be scanned or image-based")
+	}
+	return result, nil
+}
+
+// ParsePDFResume extracts structured resume data from a PDF and returns it as
+// a map ready for the client to pre-fill the manual resume form.
+// Nothing is saved to the database.
+func (s *resumeOptimizerServiceImpl) ParsePDFResume(ctx context.Context, req inbound.ParsePDFResumeRequest) (map[string]interface{}, error) {
+	text, err := extractTextFromPDF(req.PDFBytes)
+	if err != nil {
+		return nil, fmt.Errorf("PDF text extraction failed: %w", err)
+	}
+
+	parsed, err := s.aiService.ParseResumeFromText(ctx, text)
+	if err != nil {
+		return nil, fmt.Errorf("AI parsing failed: %w", err)
+	}
+
+	// Build a response shaped like a manual resume so the Flutter client can
+	// deserialise it with the existing Resume.fromJson() without changes.
+	now := time.Now().UTC().Format(time.RFC3339)
+	return map[string]interface{}{
+		"id":         uuid.New().String(), // temporary — not persisted
+		"type":       "manual",
+		"created_at": now,
+		"parsed_data": map[string]interface{}{
+			"personal":         parsed.Personal,
+			"experiences":      parsed.Experiences,
+			"education":        parsed.Education,
+			"projects":         parsed.Projects,
+			"languages":        parsed.Languages,
+			"ats_score":        parsed.ATSScore,
+			"ats_improvements": parsed.ATSImprovements,
+		},
+	}, nil
 }

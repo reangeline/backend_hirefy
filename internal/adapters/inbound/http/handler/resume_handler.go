@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -28,16 +29,18 @@ type OptimizeResumeRequestDTO struct {
 }
 
 type ManualResumeRequestDTO struct {
-	ResumeID    string                   `json:"resume_id,omitempty"`
-	Type        string                   `json:"type,omitempty"`
-	Nickname    string                   `json:"nickname,omitempty"`
-	Personal    map[string]interface{}   `json:"personal,omitempty"`
-	Experiences []map[string]interface{} `json:"experiences,omitempty"`
-	Education   []map[string]interface{} `json:"education,omitempty"`
-	Projects    []map[string]interface{} `json:"projects,omitempty"`
-	Languages   []map[string]interface{} `json:"languages,omitempty"`
-	CreatedAt   string                   `json:"created_at,omitempty"`
-	UpdatedAt   string                   `json:"updated_at,omitempty"`
+	ResumeID        string                   `json:"resume_id,omitempty"`
+	Type            string                   `json:"type,omitempty"`
+	Nickname        string                   `json:"nickname,omitempty"`
+	Personal        map[string]interface{}   `json:"personal,omitempty"`
+	Experiences     []map[string]interface{} `json:"experiences,omitempty"`
+	Education       []map[string]interface{} `json:"education,omitempty"`
+	Projects        []map[string]interface{} `json:"projects,omitempty"`
+	Languages       []map[string]interface{} `json:"languages,omitempty"`
+	ATSScore        *float64                 `json:"ats_score,omitempty"`
+	ATSImprovements []string                 `json:"ats_improvements,omitempty"`
+	CreatedAt       string                   `json:"created_at,omitempty"`
+	UpdatedAt       string                   `json:"updated_at,omitempty"`
 }
 
 func (h *ResumeHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
@@ -173,6 +176,12 @@ func (h *ResumeHandler) CreateManualResume(w http.ResponseWriter, r *http.Reques
 	if req.Languages != nil {
 		parsed["languages"] = req.Languages
 	}
+	if req.ATSScore != nil {
+		parsed["ats_score"] = *req.ATSScore
+	}
+	if req.ATSImprovements != nil {
+		parsed["ats_improvements"] = req.ATSImprovements
+	}
 	if req.Nickname != "" {
 		parsed["nickname"] = req.Nickname
 	}
@@ -217,6 +226,12 @@ func (h *ResumeHandler) UpdateManualResume(w http.ResponseWriter, r *http.Reques
 	}
 	if req.Languages != nil {
 		parsed["languages"] = req.Languages
+	}
+	if req.ATSScore != nil {
+		parsed["ats_score"] = *req.ATSScore
+	}
+	if req.ATSImprovements != nil {
+		parsed["ats_improvements"] = req.ATSImprovements
 	}
 
 	updated, err := h.resumeService.UpdateManualResume(r.Context(), inbound.UpdateManualResumeRequest{
@@ -317,4 +332,42 @@ func (h *ResumeHandler) OptimizeForLinkedIn(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondJSON(w, http.StatusAccepted, job)
+}
+
+// ParsePDFResume accepts a multipart/form-data upload with a "file" field (PDF),
+// extracts text, passes it to the AI for structured parsing, and returns the
+// parsed data shaped as a manual resume. Nothing is saved to the DB.
+func (h *ResumeHandler) ParsePDFResume(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("user_id").(string)
+
+	// Limit upload size to 10 MB
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		respondError(w, http.StatusBadRequest, "file too large or invalid multipart form")
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "missing 'file' field in form")
+		return
+	}
+	defer file.Close()
+
+	pdfBytes, err := io.ReadAll(file)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to read uploaded file")
+		return
+	}
+
+	result, err := h.resumeService.ParsePDFResume(r.Context(), inbound.ParsePDFResumeRequest{
+		UserID:   userID,
+		PDFBytes: pdfBytes,
+		FileName: fileHeader.Filename,
+	})
+	if err != nil {
+		respondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, result)
 }

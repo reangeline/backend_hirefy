@@ -15,4 +15,8 @@ type UserRepository interface {
 	Update(ctx context.Context, user *domain.User) error
 	UpdateFCMToken(ctx context.Context, userID, token string) error
 	Delete(ctx context.Context, userID string) error
+	// PurgeAllUserItems deletes every DynamoDB item whose PK is USER#<userID>.
+	// This includes the user record, subscription, resumes, optimized resumes,
+	// optimization jobs, pipeline jobs, and credit transactions.
+	PurgeAllUserItems(ctx context.Context, userID string) error
 }

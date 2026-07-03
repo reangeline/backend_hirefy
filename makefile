@@ -7,12 +7,12 @@ deps:
 
 # Build para Lambda
 build: build-worker
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/api/main.go
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/api/main.go
 	zip deployment.zip bootstrap firebase_credentials.json
 
 # Build worker Lambda
 build-worker:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/worker/main.go
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/worker/main.go
 	zip deployment-worker.zip bootstrap firebase_credentials.json
 
 # Build local

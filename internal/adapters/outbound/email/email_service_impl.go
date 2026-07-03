@@ -66,6 +66,10 @@ func (s *emailServiceImpl) SendVerificationEmail(ctx context.Context, email, cod
 }
 
 func (s *emailServiceImpl) sendViaSES(ctx context.Context, toEmail, code string) error {
+	if s.fromEmail == "" {
+		return fmt.Errorf("SES_FROM_EMAIL is not configured")
+	}
+
 	// ✅ CORRIGIR: Verificar se template foi carregado
 	if verificationEmailTemplate == "" {
 		fmt.Printf("⚠️ Template vazio, usando fallback HTML\n")

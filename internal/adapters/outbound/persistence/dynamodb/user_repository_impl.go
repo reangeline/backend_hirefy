@@ -211,6 +211,75 @@ func (r *userRepositoryImpl) Delete(ctx context.Context, userID string) error {
 	return err
 }
 
+// PurgeAllUserItems repeatedly queries the user's partition until it is empty
+// and deletes items in batches of 25 (the DynamoDB BatchWriteItem limit).
+// Re-querying from the start avoids skipping items while deleting the same
+// partition that is being paginated.
+func (r *userRepositoryImpl) PurgeAllUserItems(ctx context.Context, userID string) error {
+	pk := fmt.Sprintf("USER#%s", userID)
+
+	for {
+		queryOut, err := r.client.db.Query(ctx, &dynamodb.QueryInput{
+			TableName:              aws.String(r.client.tableName),
+			KeyConditionExpression: aws.String("PK = :pk"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":pk": &types.AttributeValueMemberS{Value: pk},
+			},
+			ProjectionExpression: aws.String("PK, SK"),
+			ConsistentRead:       aws.Bool(true),
+		})
+		if err != nil {
+			return fmt.Errorf("PurgeAllUserItems query failed: %w", err)
+		}
+
+		if len(queryOut.Items) == 0 {
+			break
+		}
+
+		// Batch delete up to 25 items per BatchWriteItem call.
+		for i := 0; i < len(queryOut.Items); i += 25 {
+			end := i + 25
+			if end > len(queryOut.Items) {
+				end = len(queryOut.Items)
+			}
+			chunk := queryOut.Items[i:end]
+
+			var writeReqs []types.WriteRequest
+			for _, item := range chunk {
+				writeReqs = append(writeReqs, types.WriteRequest{
+					DeleteRequest: &types.DeleteRequest{
+						Key: map[string]types.AttributeValue{
+							"PK": item["PK"],
+							"SK": item["SK"],
+						},
+					},
+				})
+			}
+
+			out, err := r.client.db.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+				RequestItems: map[string][]types.WriteRequest{
+					r.client.tableName: writeReqs,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("PurgeAllUserItems batch delete failed: %w", err)
+			}
+
+			// Retry any unprocessed items (e.g. due to DynamoDB throttling).
+			for len(out.UnprocessedItems) > 0 {
+				out, err = r.client.db.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+					RequestItems: out.UnprocessedItems,
+				})
+				if err != nil {
+					return fmt.Errorf("PurgeAllUserItems retry failed: %w", err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *userRepositoryImpl) UpdateFCMToken(ctx context.Context, userID, token string) error {
 	updateExpr := "SET #fcmToken = :fcmToken, #updatedAt = :updatedAt"
 

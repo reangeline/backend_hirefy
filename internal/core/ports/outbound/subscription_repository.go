@@ -13,4 +13,5 @@ type SubscriptionRepository interface {
 	GetByStripeSubscriptionID(ctx context.Context, stripeSubID string) (*domain.Subscription, error)
 	GetByRevenueCatCustomerID(ctx context.Context, customerID string) (*domain.Subscription, error) // ✅ ADICIONAR
 	Update(ctx context.Context, subscription *domain.Subscription) error
+	DeleteByUserID(ctx context.Context, userID string) error
 }

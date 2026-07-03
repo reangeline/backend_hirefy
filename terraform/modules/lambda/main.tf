@@ -33,7 +33,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchWriteItem"
         ]
         Resource = [
           var.dynamodb_table_arn,
@@ -58,7 +59,10 @@ resource "aws_iam_role_policy" "lambda_cognito" {
           "cognito-idp:AdminGetUser",
           "cognito-idp:AdminInitiateAuth",
           "cognito-idp:AdminRespondToAuthChallenge",
-          "cognito-idp:AdminConfirmSignUp"
+          "cognito-idp:AdminConfirmSignUp",
+          "cognito-idp:AdminSetUserPassword",
+          "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:AdminDeleteUser"
         ]
         Resource = var.cognito_pool_arn
       }
@@ -123,6 +127,27 @@ resource "aws_iam_role_policy" "lambda_sqs_consume" {
           "sqs:GetQueueAttributes"
         ]
         Resource = var.sqs_consume_arns
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_s3" {
+  count = length(var.s3_bucket_arns) > 0 ? 1 : 0
+
+  name = "${var.function_name}-s3-${var.environment}"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion"
+        ]
+        Resource = [for bucket_arn in var.s3_bucket_arns : "${bucket_arn}/*"]
       }
     ]
   })

@@ -85,3 +85,87 @@ func (p *Publisher) NotifyResumeOptimized(ctx context.Context, userID, jobID, op
 
 	return nil
 }
+
+func (p *Publisher) NotifyLinkedInOptimized(ctx context.Context, userID, jobID, optimizedResumeID string) error {
+	if p == nil || p.client == nil {
+		return nil
+	}
+
+	user, err := p.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.FCMToken == "" {
+		log.Printf("[fcm] user %s has no FCM token; skipping push", userID)
+		return nil
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	msg := &messaging.Message{
+		Token: user.FCMToken,
+		Notification: &messaging.Notification{
+			Title: "LinkedIn profile optimized",
+			Body:  "Your LinkedIn profile optimization is ready. Check your headline, about, and experience suggestions.",
+		},
+		Data: map[string]string{
+			"type":                "linkedin_optimized",
+			"job_id":              jobID,
+			"optimized_resume_id": optimizedResumeID,
+		},
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{Aps: &messaging.Aps{Sound: "default"}},
+		},
+		Android: &messaging.AndroidConfig{Priority: "high"},
+	}
+
+	if _, err := p.client.Send(sendCtx, msg); err != nil {
+		return fmt.Errorf("failed to send fcm notification: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Publisher) NotifyInterviewScheduled(ctx context.Context, userID, jobID, companyName, interviewType, interviewAt string) error {
+	if p == nil || p.client == nil {
+		return nil
+	}
+
+	user, err := p.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.FCMToken == "" {
+		log.Printf("[fcm] user %s has no FCM token; skipping push", userID)
+		return nil
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	msg := &messaging.Message{
+		Token: user.FCMToken,
+		Notification: &messaging.Notification{
+			Title: "Interview scheduled",
+			Body:  fmt.Sprintf("%s interview at %s on %s", interviewType, companyName, interviewAt),
+		},
+		Data: map[string]string{
+			"type":         "interview_scheduled",
+			"job_id":       jobID,
+			"interview_at": interviewAt,
+		},
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{Aps: &messaging.Aps{Sound: "default"}},
+		},
+		Android: &messaging.AndroidConfig{Priority: "high"},
+	}
+
+	if _, err := p.client.Send(sendCtx, msg); err != nil {
+		return fmt.Errorf("failed to send fcm notification: %w", err)
+	}
+
+	return nil
+}

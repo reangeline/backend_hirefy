@@ -21,11 +21,12 @@ func NewAuthHandler(authService inbound.AuthService, userService inbound.UserSer
 }
 
 type SignUpRequestDTO struct {
-	Email           string `json:"email" validate:"required,email"`
-	Password        string `json:"password" validate:"required,min=8"`
-	Name            string `json:"name" validate:"required"`
-	TermsAcceptedAt string `json:"terms_accepted_at"`
-	TermsVersion    string `json:"terms_version"`
+	Email           string                 `json:"email" validate:"required,email"`
+	Password        string                 `json:"password" validate:"required,min=8"`
+	Name            string                 `json:"name" validate:"required"`
+	TermsAcceptedAt string                 `json:"terms_accepted_at"`
+	TermsVersion    string                 `json:"terms_version"`
+	ParsedResume    map[string]interface{} `json:"parsed_resume,omitempty"`
 }
 
 type SignInRequestDTO struct {
@@ -47,6 +48,7 @@ func (h *AuthHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		Name:            req.Name,
 		TermsAcceptedAt: req.TermsAcceptedAt,
 		TermsVersion:    req.TermsVersion,
+		ParsedResume:    req.ParsedResume,
 	})
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -251,4 +253,51 @@ func (h *AuthHandler) ConfirmForgotPassword(w http.ResponseWriter, r *http.Reque
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "Password reset successfully",
 	})
+}
+
+type SocialSignInRequestDTO struct {
+	Provider string `json:"provider"`
+	IDToken  string `json:"id_token"`
+	Name     string `json:"name"`
+}
+
+func (h *AuthHandler) SocialSignIn(w http.ResponseWriter, r *http.Request) {
+	var req SocialSignInRequestDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Provider == "" || req.IDToken == "" {
+		respondError(w, http.StatusBadRequest, "provider and id_token are required")
+		return
+	}
+	if req.Provider != "apple" && req.Provider != "google" {
+		respondError(w, http.StatusBadRequest, "provider must be \"apple\" or \"google\"")
+		return
+	}
+
+	authResp, err := h.authService.SocialSignIn(r.Context(), inbound.SocialSignInRequest{
+		Provider: req.Provider,
+		IDToken:  req.IDToken,
+		Name:     req.Name,
+	})
+	if err != nil {
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "token validation failed"),
+			strings.Contains(errMsg, "invalid Apple token"),
+			strings.Contains(errMsg, "invalid Google token"):
+			respondError(w, http.StatusUnauthorized, "invalid or expired social token")
+		case strings.Contains(errMsg, "email not available in token"):
+			respondError(w, http.StatusUnauthorized, errMsg)
+		case strings.Contains(errMsg, "provider") && strings.Contains(errMsg, "must be"):
+			respondError(w, http.StatusBadRequest, errMsg)
+		default:
+			respondError(w, http.StatusInternalServerError, "social sign-in failed")
+		}
+		return
+	}
+
+	respondJSON(w, http.StatusOK, authResp)
 }

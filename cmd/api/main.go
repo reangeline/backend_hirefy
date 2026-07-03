@@ -20,6 +20,7 @@ import (
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/payment/stripe"
 	"github.com/reangeline/backend_applywise/internal/adapters/outbound/persistence/dynamodb"
 	queue "github.com/reangeline/backend_applywise/internal/adapters/outbound/queue/sqs"
+	s3storage "github.com/reangeline/backend_applywise/internal/adapters/outbound/storage/s3"
 	appservice "github.com/reangeline/backend_applywise/internal/application/service"
 	appconfig "github.com/reangeline/backend_applywise/pkg/config"
 )
@@ -39,6 +40,7 @@ func init() {
 	// Inicializa adapters (outbound)
 	dynamoClient := dynamodb.NewClient(awsCfg, cfg.DynamoDBTable)
 	sesClient := sesv2.NewFromConfig(awsCfg)
+	objectStorage := s3storage.NewObjectStorage(awsCfg, cfg.ResumesBucketName)
 
 	userRepo := dynamodb.NewUserRepository(dynamoClient)
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
@@ -46,6 +48,8 @@ func init() {
 	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient)           // ✅ ADICIONAR
 	creditTransactionRepo := dynamodb.NewCreditTransactionRepository(dynamoClient) // ✅ NOVO
 	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
+	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
+	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -64,7 +68,7 @@ func init() {
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
 
 	// Inicializa services (application layer)
-	userService := appservice.NewUserService(userRepo, cognitoClient)
+	userService := appservice.NewUserService(userRepo, resumeRepo, objectStorage, cognitoClient, subscriptionRepo, verificationRepo)
 
 	authService := appservice.NewAuthService(
 		cognitoClient,
@@ -72,11 +76,13 @@ func init() {
 		subscriptionRepo,
 		verificationRepo,
 		emailService,
+		resumeRepo,
 	)
 
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
+	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -92,6 +98,11 @@ func init() {
 		resumeService,
 		paymentService,
 		revenueCatService,
+		pipelineRepo,
+		contactRepo,
+		userRepo,
+		fcmNotifier,
+		pipelineCoachService,
 	)
 
 	// Configura Lambda adapter
@@ -118,6 +129,7 @@ func runLocalServer() {
 	// ... (mesmo código de init mas sem chiLambda)
 	awsCfg, _ := config.LoadDefaultConfig(context.Background())
 	dynamoClient := dynamodb.NewClient(awsCfg, cfg.DynamoDBTable)
+	objectStorage := s3storage.NewObjectStorage(awsCfg, cfg.ResumesBucketName)
 
 	userRepo := dynamodb.NewUserRepository(dynamoClient)
 	subscriptionRepo := dynamodb.NewSubscriptionRepository(dynamoClient)
@@ -125,6 +137,8 @@ func runLocalServer() {
 	verificationRepo := dynamodb.NewVerificationRepository(dynamoClient)
 	creditTransactionRepo := dynamodb.NewCreditTransactionRepository(dynamoClient)
 	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
+	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
+	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
@@ -143,8 +157,8 @@ func runLocalServer() {
 		IsDev:     os.Getenv("ENVIRONMENT") == "dev",
 	})
 
-	userService := appservice.NewUserService(userRepo, cognitoClient)
-	authService := appservice.NewAuthService(cognitoClient, userRepo, subscriptionRepo, verificationRepo, emailService)
+	userService := appservice.NewUserService(userRepo, resumeRepo, objectStorage, cognitoClient, subscriptionRepo, verificationRepo)
+	authService := appservice.NewAuthService(cognitoClient, userRepo, subscriptionRepo, verificationRepo, emailService, resumeRepo)
 
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
@@ -156,6 +170,7 @@ func runLocalServer() {
 	)
 
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
+	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -164,6 +179,11 @@ func runLocalServer() {
 		resumeService,
 		paymentService,
 		revenueCatService,
+		pipelineRepo,
+		contactRepo,
+		userRepo,
+		fcmNotifier,
+		pipelineCoachSvc,
 	)
 
 	port := os.Getenv("PORT")
@@ -182,6 +202,7 @@ func loadConfig() *appconfig.Config {
 		DynamoDBTable:        os.Getenv("DYNAMODB_TABLE"),
 		CognitoUserPoolID:    os.Getenv("COGNITO_USER_POOL_ID"),
 		CognitoClientID:      os.Getenv("COGNITO_CLIENT_ID"),
+		ResumesBucketName:    os.Getenv("RESUMES_BUCKET_NAME"),
 		StripeSecretKey:      os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret:  os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),

@@ -251,6 +251,37 @@ func (r *subscriptionRepositoryImpl) Update(ctx context.Context, subscription *d
 	return err
 }
 
+func (r *subscriptionRepositoryImpl) DeleteByUserID(ctx context.Context, userID string) error {
+	// First query all subscriptions for this user
+	result, err := r.client.db.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.client.tableName),
+		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USER#%s", userID)},
+			":sk": &types.AttributeValueMemberS{Value: "SUB#"},
+		},
+		ProjectionExpression: aws.String("PK, SK"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to query subscriptions for deletion: %w", err)
+	}
+
+	for _, item := range result.Items {
+		_, err := r.client.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: aws.String(r.client.tableName),
+			Key: map[string]types.AttributeValue{
+				"PK": item["PK"],
+				"SK": item["SK"],
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to delete subscription item: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (r *subscriptionRepositoryImpl) itemToSubscription(item *SubscriptionItem) (*domain.Subscription, error) {
 	createdAt, err := time.Parse(time.RFC3339, item.CreatedAt)
 	if err != nil {

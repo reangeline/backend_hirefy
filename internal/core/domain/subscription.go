@@ -67,7 +67,7 @@ func NewSubscription(userID string, plan SubscriptionPlan) *Subscription {
 		Plan:             plan,
 		Status:           SubscriptionStatusActive,
 		Store:            StoreNone,
-		Credits:          1, // Usuário começa com 1 crédito grátis
+		Credits:          3, // Usuário começa com 3 créditos grátis
 		CurrentPeriodEnd: periodEnd,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -80,9 +80,12 @@ func (s *Subscription) IsActive() bool {
 		return true
 	}
 
-	// Para planos pagos (Basic/Premium), valida status e período
+	// Para planos pagos (Basic/Premium), valida status e período.
+	// Grace period de 24h para cobrir atraso na entrega do webhook de renovação
+	// (e.g. RevenueCat pode demorar alguns minutos para notificar).
+	const gracePeriod = 24 * time.Hour
 	return s.Status == SubscriptionStatusActive &&
-		time.Now().Before(s.CurrentPeriodEnd)
+		time.Now().Before(s.CurrentPeriodEnd.Add(gracePeriod))
 }
 
 func (s *Subscription) Cancel() error {

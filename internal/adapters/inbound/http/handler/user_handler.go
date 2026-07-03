@@ -74,6 +74,42 @@ func (h *UserHandler) UpdateFCMToken(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+type updateMeRequest struct {
+	Name string `json:"name"`
+}
+
+func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "user not found in context")
+		return
+	}
+
+	var req updateMeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		respondError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	user, err := h.userService.UpdateUser(r.Context(), userID, req.Name)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"id":         user.ID,
+		"email":      user.Email,
+		"name":       user.Name,
+		"updated_at": user.UpdatedAt,
+	})
+}
+
 func (h *UserHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("user_id").(string)
 	if !ok {
@@ -82,7 +118,7 @@ func (h *UserHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.userService.DeleteUser(r.Context(), userID); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to delete account")
+		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
