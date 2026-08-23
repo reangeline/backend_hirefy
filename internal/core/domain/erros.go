@@ -24,7 +24,8 @@ var (
 	// Job errors
 	ErrJobNotFound = errors.New("optimization job not found")
 
-	// Payment errors
+        // Pipeline errors
+        ErrPipelineJobNotFound = errors.New("pipeline job not found")
 	ErrPaymentFailed        = errors.New("payment failed")
 	ErrInvalidPaymentMethod = errors.New("invalid payment method")
 

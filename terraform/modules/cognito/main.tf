@@ -1,9 +1,7 @@
 data "aws_caller_identity" "current" {}
 
-# Verificar o email no SES (receberá um email de confirmação da AWS)
-resource "aws_ses_email_identity" "from_email" {
-  email = var.ses_from_email
-}
+# Domínio verificado manualmente no console SES — referenciado pelo ARN abaixo
+# O recurso aws_ses_email_identity foi substituído pela verificação de domínio
 
 resource "aws_cognito_user_pool" "main" {
   name = "${var.app_name}-${var.environment}"
@@ -63,6 +61,7 @@ resource "aws_cognito_user_pool_client" "main" {
   generate_secret = false
 
   explicit_auth_flows = [
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH",
     "ALLOW_USER_SRP_AUTH"
@@ -79,9 +78,14 @@ resource "aws_cognito_user_pool_client" "main" {
   }
 }
 
-# Policy que autoriza o Cognito a enviar emails via SES usando esse remetente
+# Referencia o email verificado no SES criado manualmente no console
+data "aws_ses_email_identity" "from_email" {
+  email = var.ses_from_email
+}
+
+# Policy que autoriza o Cognito a enviar emails via SES
 resource "aws_ses_identity_policy" "cognito_send_email" {
-  identity = aws_ses_email_identity.from_email.email
+  identity = var.ses_from_email
   name     = "cognito-send-email"
 
   policy = jsonencode({

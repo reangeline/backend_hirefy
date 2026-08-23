@@ -8,6 +8,7 @@ type SignUpRequest struct {
 	Name            string
 	TermsAcceptedAt string
 	TermsVersion    string
+	ParsedResume    map[string]interface{} // optional: if set, a manual resume is created automatically
 }
 
 type SignInRequest struct {
@@ -48,6 +49,12 @@ type AuthResponse struct {
 
 }
 
+type SocialSignInRequest struct {
+	Provider string // "apple" or "google"
+	IDToken  string
+	Name     string // optional, overrides name from token
+}
+
 type AuthService interface {
 	SignUp(ctx context.Context, req SignUpRequest) (*AuthResponse, error)
 	SignIn(ctx context.Context, req SignInRequest) (*AuthResponse, error)
@@ -58,4 +65,5 @@ type AuthService interface {
 	ResendConfirmationCode(ctx context.Context, req ResendCodeRequest) error
 	ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error
 	ConfirmForgotPassword(ctx context.Context, req ConfirmForgotPasswordRequest) error
+	SocialSignIn(ctx context.Context, req SocialSignInRequest) (*AuthResponse, error)
 }

@@ -4,6 +4,7 @@ type Config struct {
 	DynamoDBTable        string
 	CognitoUserPoolID    string
 	CognitoClientID      string
+	ResumesBucketName    string
 	StripeSecretKey      string
 	StripeWebhookSecret  string
 	OpenAIKey            string

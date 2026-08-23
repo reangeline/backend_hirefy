@@ -64,6 +64,13 @@ type ProcessLinkedInOptimizationJobRequest struct {
 	ResumeID string
 }
 
+// ParsePDFResumeRequest carries the raw PDF bytes to be parsed by the AI.
+type ParsePDFResumeRequest struct {
+	UserID   string
+	PDFBytes []byte
+	FileName string
+}
+
 // ResumeOptimizerService define os casos de uso de otimização de currículo
 type ResumeOptimizerService interface {
 	UploadResume(ctx context.Context, req UploadResumeRequest) (*domain.Resume, error)
@@ -83,4 +90,8 @@ type ResumeOptimizerService interface {
 
 	StartLinkedInOptimization(ctx context.Context, req StartLinkedInOptimizationRequest) (*domain.OptimizationJob, error)
 	ProcessLinkedInOptimizationJob(ctx context.Context, req ProcessLinkedInOptimizationJobRequest) (*domain.OptimizedResume, error)
+
+	// ParsePDFResume extracts structured resume data from a PDF file using AI.
+	// It does NOT persist anything — the result is intended to pre-fill the manual resume form on the client.
+	ParsePDFResume(ctx context.Context, req ParsePDFResumeRequest) (map[string]interface{}, error)
 }

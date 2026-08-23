@@ -67,3 +67,9 @@ variable "sqs_consume_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "s3_bucket_arns" {
+  description = "List of S3 bucket ARNs the function can delete objects from"
+  type        = list(string)
+  default     = []
+}

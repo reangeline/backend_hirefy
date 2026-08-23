@@ -66,6 +66,38 @@ type LinkedInOptimizationResult struct {
 	ProfileStrengthScore float64              `json:"profile_strength_score"`
 }
 
+// PDFResumeData represents the structured resume data extracted from a PDF.
+type PDFResumeData struct {
+	Personal        map[string]interface{}   `json:"personal"`
+	Experiences     []map[string]interface{} `json:"experiences"`
+	Education       []map[string]interface{} `json:"education"`
+	Projects        []map[string]interface{} `json:"projects"`
+	Languages       []map[string]interface{} `json:"languages"`
+	ATSScore        float64                  `json:"ats_score"`
+	ATSImprovements []string                 `json:"ats_improvements"`
+}
+
+// CoachJobInput holds all context needed to generate stage-specific coaching content.
+type CoachJobInput struct {
+	Stage            string
+	JobTitle         string
+	CompanyName      string
+	Location         string
+	AtsScore         int
+	JobDescription   string
+	JobURL           string
+	MatchedKeywords  []string
+	MissingKeywords  []string
+	DaysSinceApplied int
+	Tone             string // "default" | "formal" | "shorter"
+}
+
+// CoachResult holds the AI-generated coaching content.
+type CoachResult struct {
+	Content string
+	Type    string // "followup" | "interview_prep" | "offer_insights" | "feedback_request"
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -73,4 +105,6 @@ type AIService interface {
 	OptimizeResume(ctx context.Context, resume *ResumeAnalysis, job *JobAnalysis, originalResume string) (*OptimizationResult, error)
 	EstimateSalary(ctx context.Context, targetRole, targetCompany string) (*SalaryEstimate, error)
 	OptimizeForLinkedIn(ctx context.Context, resume *ResumeAnalysis) (*LinkedInOptimizationResult, error)
+	ParseResumeFromText(ctx context.Context, text string) (*PDFResumeData, error)
+	GenerateCoachContent(ctx context.Context, input *CoachJobInput) (*CoachResult, error)
 }

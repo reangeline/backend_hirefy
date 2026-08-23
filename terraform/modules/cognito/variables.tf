@@ -13,3 +13,9 @@ variable "ses_from_email" {
   type        = string
   default     = "contact@hirefy.careers"
 }
+
+variable "ses_domain" {
+  description = "Domain verified in SES (e.g. hirefy.careers)"
+  type        = string
+  default     = "hirefy.careers"
+}

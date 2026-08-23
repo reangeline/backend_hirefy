@@ -362,8 +362,30 @@ func (r *resumeRepositoryImpl) UpdateOptimizedResume(ctx context.Context, optimi
 	return err
 }
 
-func (r *resumeRepositoryImpl) GetOptimizedResume(ctx context.Context, optimizedID string) (*domain.OptimizedResume, error) {
-	return nil, fmt.Errorf("use ListOptimizedResumesByUserID instead")
+func (r *resumeRepositoryImpl) GetOptimizedResume(ctx context.Context, userID, optimizedID string) (*domain.OptimizedResume, error) {
+	pk := fmt.Sprintf("USER#%s", userID)
+	sk := fmt.Sprintf("OPTIMIZED#%s", optimizedID)
+
+	result, err := r.client.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.client.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pk},
+			"SK": &types.AttributeValueMemberS{Value: sk},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result.Item == nil {
+		return nil, domain.ErrResumeNotFound
+	}
+
+	var item OptimizedResumeItem
+	if err := attributevalue.UnmarshalMap(result.Item, &item); err != nil {
+		return nil, err
+	}
+
+	return r.itemToOptimizedResume(&item)
 }
 
 func (r *resumeRepositoryImpl) ListOptimizedResumesByUserID(ctx context.Context, userID string) ([]*domain.OptimizedResume, error) {
@@ -409,6 +431,18 @@ func (r *resumeRepositoryImpl) itemToResume(item *ResumeItem) (*domain.Resume, e
 		return nil, err
 	}
 
+	// Normalize personal.name: copy from full_name when name is absent, so
+	// clients that read either field get a value.
+	if item.ParsedData != nil {
+		if personal, ok := item.ParsedData["personal"].(map[string]interface{}); ok {
+			fullName, _ := personal["full_name"].(string)
+			name, _ := personal["name"].(string)
+			if fullName != "" && name == "" {
+				personal["name"] = fullName
+			}
+		}
+	}
+
 	return &domain.Resume{
 		ID:              item.ID,
 		UserID:          item.UserID,
@@ -425,6 +459,17 @@ func (r *resumeRepositoryImpl) itemToOptimizedResume(item *OptimizedResumeItem) 
 	createdAt, err := time.Parse(time.RFC3339, item.CreatedAt)
 	if err != nil {
 		return nil, err
+	}
+
+	// Normalize personal.name: copy from full_name when name is absent.
+	if item.ParsedData != nil {
+		if personal, ok := item.ParsedData["personal"].(map[string]interface{}); ok {
+			fullName, _ := personal["full_name"].(string)
+			name, _ := personal["name"].(string)
+			if fullName != "" && name == "" {
+				personal["name"] = fullName
+			}
+		}
 	}
 
 	optimized := &domain.OptimizedResume{

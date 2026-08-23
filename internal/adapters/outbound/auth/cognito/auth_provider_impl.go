@@ -2,6 +2,7 @@ package cognito
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -284,7 +285,22 @@ func (a *authProviderImpl) MarkEmailAsVerified(ctx context.Context, email string
 	return nil
 }
 
-// DeleteUser permanently removes a user from the Cognito user pool
+// UserExistsInCognito returns true when the user exists in the Cognito user pool.
+// It uses AdminGetUser internally; a UserNotFoundException means the user is absent.
+func (a *authProviderImpl) UserExistsInCognito(ctx context.Context, email string) (bool, error) {
+	_, err := a.getCognitoUserID(ctx, email)
+	if err != nil {
+		var notFound *types.UserNotFoundException
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check Cognito user existence: %w", err)
+	}
+	return true, nil
+}
+
+// DeleteUser permanently removes a user from the Cognito user pool.
+// It is idempotent: if the user no longer exists the call is treated as a success.
 func (a *authProviderImpl) DeleteUser(ctx context.Context, email string) error {
 	input := &cognitoidentityprovider.AdminDeleteUserInput{
 		UserPoolId: aws.String(a.userPoolID),
@@ -293,6 +309,11 @@ func (a *authProviderImpl) DeleteUser(ctx context.Context, email string) error {
 
 	_, err := a.client.AdminDeleteUser(ctx, input)
 	if err != nil {
+		var notFound *types.UserNotFoundException
+		if errors.As(err, &notFound) {
+			// User is already gone – goal achieved.
+			return nil
+		}
 		return fmt.Errorf("failed to delete user from Cognito: %w", err)
 	}
 

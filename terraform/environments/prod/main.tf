@@ -33,9 +33,10 @@ module "dynamodb" {
 module "cognito" {
   source = "../../modules/cognito"
 
-  environment   = var.environment
-  app_name      = var.app_name
+  environment    = var.environment
+  app_name       = var.app_name
   ses_from_email = var.ses_from_email
+  ses_domain     = "hirefy.careers"
 }
 
 # Lambda Function
@@ -52,6 +53,7 @@ module "lambda" {
     DYNAMODB_TABLE            = module.dynamodb.table_name
     COGNITO_USER_POOL_ID      = module.cognito.user_pool_id
     COGNITO_CLIENT_ID         = module.cognito.client_id
+    RESUMES_BUCKET_NAME       = module.s3.bucket_name
     STRIPE_SECRET_KEY         = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET     = var.stripe_webhook_secret
     STRIPE_FREE_PRICE_ID      = var.stripe_free_price_id
@@ -71,6 +73,7 @@ module "lambda" {
   revenuecat_webhook_secret = var.revenuecat_webhook_secret
 
   sqs_queue_arns = [module.optimization_queue.queue_arn]
+  s3_bucket_arns = [module.s3.bucket_arn]
 }
 
 # Worker Lambda to consume optimization jobs
@@ -82,7 +85,7 @@ module "lambda_worker" {
   handler        = "bootstrap"
   runtime        = "provided.al2"
   source_file    = "../../../deployment-worker.zip"
-  lambda_timeout = 60
+  lambda_timeout = 120
 
   environment_variables = {
     DYNAMODB_TABLE         = module.dynamodb.table_name
@@ -112,7 +115,8 @@ resource "aws_lambda_event_source_mapping" "optimization_queue_to_worker" {
 module "optimization_queue" {
   source = "../../modules/sqs"
 
-  queue_name = var.optimization_queue_name
+  queue_name                 = var.optimization_queue_name
+  visibility_timeout_seconds = 180
 }
 
 # API Gateway
