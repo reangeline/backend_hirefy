@@ -5,6 +5,10 @@ on:
     paths:
       - 'terraform/**'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   terraform-plan:
     name: Terraform Plan
@@ -13,6 +17,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -25,6 +34,17 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.16.0
+
+      - name: Build Lambda
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/api/main.go
+          zip deployment.zip bootstrap
+
+      - name: Build Worker Lambda
+        run: |
+          rm -f bootstrap
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/worker/main.go
+          zip deployment-worker.zip bootstrap
 
       - name: Terraform Format Check
         id: fmt
@@ -51,7 +71,8 @@ jobs:
           terraform plan -no-color -input=false \
             -var="stripe_secret_key=${{ secrets.STRIPE_SECRET_KEY }}" \
             -var="stripe_webhook_secret=${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
-            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="revenuecat_webhook_secret=${{ secrets.REVENUECAT_WEBHOOK_SECRET }}"
         continue-on-error: true
 
       - name: Comment PR
