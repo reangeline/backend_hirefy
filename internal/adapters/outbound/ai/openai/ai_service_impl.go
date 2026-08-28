@@ -860,6 +860,55 @@ Be honest — a rambling answer without a clear outcome should score low on cont
 	return result, nil
 }
 
+const applyAssistMaxTokens = 300
+
+func (s *aiServiceImpl) SuggestApplyAnswer(ctx context.Context, input *outbound.ApplyAssistAnswerInput) (*outbound.ApplyAssistAnswerResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+
+	prompt := fmt.Sprintf(`You are helping a candidate fill out a job application screening question (e.g. LinkedIn Easy Apply custom question).
+
+Question: %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Candidate's resume data (JSON): %s
+
+Suggest a short, honest, first-person answer based ONLY on the candidate's real resume data
+above — never invent experience, years, or skills the candidate doesn't have. If the
+question asks for a number (years of experience, salary expectation) and the resume doesn't
+give enough to infer it confidently, say so plainly instead of guessing. Keep it to 1-3
+sentences, ready to paste into a form field.
+
+Return ONLY a JSON object:
+{"suggested_answer": "the answer, first person, ready to use"}`,
+		input.Question, input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600), string(resumeJSON),
+	)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, applyAssistMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		SuggestedAnswer string `json:"suggested_answer"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse apply-assist answer: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse apply-assist answer (cleaned): %w", err2)
+		}
+	}
+	if raw.SuggestedAnswer == "" {
+		return nil, fmt.Errorf("AI returned empty apply-assist answer")
+	}
+
+	return &outbound.ApplyAssistAnswerResult{SuggestedAnswer: raw.SuggestedAnswer}, nil
+}
+
 // truncate shortens a string to at most n runes.
 func truncate(s string, n int) string {
 	runes := []rune(s)
