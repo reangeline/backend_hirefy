@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"strings"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
@@ -166,7 +167,9 @@ func extractNameFromEmail(email string) string {
 	}
 
 	// Capitalizar primeira letra
-	return strings.Title(strings.ToLower(name))
+	lower := []rune(strings.ToLower(name))
+	lower[0] = unicode.ToUpper(lower[0])
+	return string(lower)
 }
 
 // getFallbackTemplate retorna template inline se embed falhar

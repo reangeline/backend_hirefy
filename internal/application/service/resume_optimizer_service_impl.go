@@ -294,6 +294,7 @@ func (s *resumeOptimizerServiceImpl) runOptimization(
 
 		if err := s.creditTransactionRepo.Create(ctx, transaction); err != nil {
 			// Log mas não falha se não conseguir registrar
+			log.Printf("[credit] failed to record transaction: userID=%s resumeID=%s err=%v", req.UserID, req.ResumeID, err)
 		}
 
 		// Atualizar subscription

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/middleware"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 )
 
@@ -44,7 +45,7 @@ type ManualResumeRequestDTO struct {
 }
 
 func (h *ResumeHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	var req UploadResumeRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -65,7 +66,7 @@ func (h *ResumeHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ResumeHandler) ListResumes(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	resumes, err := h.resumeService.ListResumes(r.Context(), userID)
 	if err != nil {
@@ -77,7 +78,7 @@ func (h *ResumeHandler) ListResumes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ResumeHandler) GetResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	resumeID := chi.URLParam(r, "resumeID")
 
 	resume, err := h.resumeService.GetResume(r.Context(), userID, resumeID)
@@ -90,7 +91,7 @@ func (h *ResumeHandler) GetResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ResumeHandler) OptimizeResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	var req OptimizeResumeRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -114,7 +115,7 @@ func (h *ResumeHandler) OptimizeResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ResumeHandler) GetOptimizationJobStatus(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	jobID := chi.URLParam(r, "jobID")
 
 	job, err := h.resumeService.GetOptimizationJob(r.Context(), userID, jobID)
@@ -127,7 +128,7 @@ func (h *ResumeHandler) GetOptimizationJobStatus(w http.ResponseWriter, r *http.
 }
 
 func (h *ResumeHandler) ListOptimizedResumes(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	optimized, err := h.resumeService.ListOptimizedResumes(r.Context(), userID)
 	if err != nil {
@@ -139,7 +140,7 @@ func (h *ResumeHandler) ListOptimizedResumes(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *ResumeHandler) GetOptimizedResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	optimizedID := chi.URLParam(r, "optimizedID")
 
 	optimized, err := h.resumeService.GetOptimizedResume(r.Context(), userID, optimizedID)
@@ -152,7 +153,7 @@ func (h *ResumeHandler) GetOptimizedResume(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ResumeHandler) CreateManualResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	var req ManualResumeRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -202,7 +203,7 @@ func (h *ResumeHandler) CreateManualResume(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ResumeHandler) UpdateManualResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	resumeID := chi.URLParam(r, "resumeID")
 
 	var req ManualResumeRequestDTO
@@ -250,7 +251,7 @@ func (h *ResumeHandler) UpdateManualResume(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ResumeHandler) UpdateOptimizedResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	optimizedID := chi.URLParam(r, "optimizedID")
 
 	var req ManualResumeRequestDTO
@@ -291,7 +292,7 @@ func (h *ResumeHandler) UpdateOptimizedResume(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ResumeHandler) DeleteResume(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 	resumeID := chi.URLParam(r, "resumeID")
 
 	if err := h.resumeService.DeleteResume(r.Context(), userID, resumeID); err != nil {
@@ -309,7 +310,7 @@ type LinkedInOptimizeRequestDTO struct {
 
 // OptimizeForLinkedIn receives a manual resume ID and queues an async LinkedIn optimization job.
 func (h *ResumeHandler) OptimizeForLinkedIn(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	var req LinkedInOptimizeRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -338,7 +339,7 @@ func (h *ResumeHandler) OptimizeForLinkedIn(w http.ResponseWriter, r *http.Reque
 // extracts text, passes it to the AI for structured parsing, and returns the
 // parsed data shaped as a manual resume. Nothing is saved to the DB.
 func (h *ResumeHandler) ParsePDFResume(w http.ResponseWriter, r *http.Request) {
-	userID, _ := r.Context().Value("user_id").(string)
+	userID, _ := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	// Limit upload size to 10 MB
 	if err := r.ParseMultipartForm(10 << 20); err != nil {

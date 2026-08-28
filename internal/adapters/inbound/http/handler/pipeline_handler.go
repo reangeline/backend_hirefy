@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/middleware"
 	"github.com/reangeline/backend_applywise/internal/analytics"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
@@ -162,7 +163,7 @@ func toPipelineJobResponse(job *domain.PipelineJob) PipelineJobResponse {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 func (h *PipelineHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -182,7 +183,7 @@ func (h *PipelineHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -238,7 +239,7 @@ func (h *PipelineHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) GetJob(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -255,7 +256,7 @@ func (h *PipelineHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -323,7 +324,7 @@ func (h *PipelineHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -339,7 +340,7 @@ func (h *PipelineHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) GhostJob(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -410,7 +411,7 @@ func interviewTypeLabel(t string) string {
 }
 
 func (h *PipelineHandler) LogInterview(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -470,7 +471,7 @@ func (h *PipelineHandler) LogInterview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) LogFollowUp(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -522,7 +523,7 @@ type coachRequest struct {
 }
 
 func (h *PipelineHandler) Coach(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -601,7 +602,7 @@ type contactResponse struct {
 }
 
 func (h *PipelineHandler) ListContacts(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -629,7 +630,7 @@ func (h *PipelineHandler) ListContacts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) AddContact(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -671,7 +672,7 @@ func (h *PipelineHandler) AddContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PipelineHandler) DeleteContact(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -690,7 +691,7 @@ func (h *PipelineHandler) DeleteContact(w http.ResponseWriter, r *http.Request) 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 func (h *PipelineHandler) GetPipelineAnalytics(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -737,7 +738,7 @@ func respondInterviewError(w http.ResponseWriter, jobID string, err error) {
 }
 
 func (h *PipelineHandler) ListInterviewQuestions(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -753,7 +754,7 @@ func (h *PipelineHandler) ListInterviewQuestions(w http.ResponseWriter, r *http.
 }
 
 func (h *PipelineHandler) NextInterviewQuestion(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -776,7 +777,7 @@ func (h *PipelineHandler) NextInterviewQuestion(w http.ResponseWriter, r *http.R
 }
 
 func (h *PipelineHandler) SubmitInterviewAnswer(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok || userID == "" {
 		respondError(w, http.StatusUnauthorized, "unauthorized")
 		return

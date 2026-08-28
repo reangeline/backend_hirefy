@@ -1025,14 +1025,6 @@ func computeRequestTimeout(ctx context.Context, desiredTimeout time.Duration) ti
 	return allowed
 }
 
-// Helper function
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // sanitizeJSON tries to extract the first '{' through the last '}' to mitigate stray text or code fences.
 func sanitizeJSON(s string) string {
 	start := strings.Index(s, "{")

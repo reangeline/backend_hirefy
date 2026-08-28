@@ -67,13 +67,13 @@ func NewRouter(
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"applywise-api"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","service":"applywise-api"}`))
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"ok","version":"v1"}`))
+			_, _ = w.Write([]byte(`{"status":"ok","version":"v1"}`))
 		})
 
 		// Públicas
