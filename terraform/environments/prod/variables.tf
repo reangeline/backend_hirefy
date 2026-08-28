@@ -67,12 +67,13 @@ variable "optimization_queue_name" {
 variable "firebase_credentials_file" {
   description = "Path to Firebase service account JSON inside the Lambda package or layer"
   type        = string
+  default     = "/var/task/firebase_credentials.json"
 }
 
 variable "firebase_project_id" {
   description = "Firebase project ID (used to init FCM)"
   type        = string
-  default     = ""
+  default     = "applywise-35cc7"
 }
 
 variable "revenuecat_webhook_secret" {

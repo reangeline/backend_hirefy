@@ -43,7 +43,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform/environments/prod
-        run: terraform init
+        run: terraform init -input=false
 
       - name: Terraform Plan
         working-directory: terraform/environments/prod
@@ -51,7 +51,8 @@ jobs:
           TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-        run: terraform plan -out=tfplan
+          TF_VAR_revenuecat_webhook_secret: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
+        run: terraform plan -input=false -out=tfplan
 
       - name: Terraform Apply
         working-directory: terraform/environments/prod
@@ -59,6 +60,7 @@ jobs:
           TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          TF_VAR_revenuecat_webhook_secret: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
         run: terraform apply -auto-approve tfplan
 
       - name: Get API Endpoint

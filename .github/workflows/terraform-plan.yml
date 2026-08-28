@@ -35,7 +35,7 @@ jobs:
         id: init
         run: |
           cd terraform/environments/dev
-          terraform init
+          terraform init -input=false
 
       - name: Terraform Validate
         id: validate
@@ -48,7 +48,7 @@ jobs:
         id: plan
         run: |
           cd terraform/environments/dev
-          terraform plan -no-color \
+          terraform plan -no-color -input=false \
             -var="stripe_secret_key=${{ secrets.STRIPE_SECRET_KEY }}" \
             -var="stripe_webhook_secret=${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
             -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
