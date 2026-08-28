@@ -50,21 +50,20 @@ module "lambda" {
   source_file   = "../../../deployment.zip"
 
   environment_variables = {
-    DYNAMODB_TABLE            = module.dynamodb.table_name
-    COGNITO_USER_POOL_ID      = module.cognito.user_pool_id
-    COGNITO_CLIENT_ID         = module.cognito.client_id
-    RESUMES_BUCKET_NAME       = module.s3.bucket_name
-    STRIPE_SECRET_KEY         = var.stripe_secret_key
-    STRIPE_WEBHOOK_SECRET     = var.stripe_webhook_secret
-    STRIPE_FREE_PRICE_ID      = var.stripe_free_price_id
-    STRIPE_PRO_PRICE_ID       = var.stripe_pro_price_id
-    OPENAI_API_KEY            = var.openai_api_key
-    SES_FROM_EMAIL            = var.ses_from_email
-    ENVIRONMENT               = var.environment
-    REVENUECAT_WEBHOOK_SECRET = var.revenuecat_webhook_secret
-    OPTIMIZATION_QUEUE_URL    = module.optimization_queue.queue_url
-    FIREBASE_CREDENTIALS_FILE = var.firebase_credentials_file
-    FIREBASE_PROJECT_ID       = var.firebase_project_id
+    DYNAMODB_TABLE               = module.dynamodb.table_name
+    COGNITO_USER_POOL_ID         = module.cognito.user_pool_id
+    COGNITO_CLIENT_ID            = module.cognito.client_id
+    RESUMES_BUCKET_NAME          = module.s3.bucket_name
+    STRIPE_SECRET_KEY            = var.stripe_secret_key
+    STRIPE_WEBHOOK_SECRET        = var.stripe_webhook_secret
+    STRIPE_PRICE_PREMIUM_MONTHLY = var.stripe_price_premium_monthly
+    OPENAI_API_KEY               = var.openai_api_key
+    SES_FROM_EMAIL               = var.ses_from_email
+    ENVIRONMENT                  = var.environment
+    REVENUECAT_WEBHOOK_SECRET    = var.revenuecat_webhook_secret
+    OPTIMIZATION_QUEUE_URL       = module.optimization_queue.queue_url
+    FIREBASE_CREDENTIALS_FILE    = var.firebase_credentials_file
+    FIREBASE_PROJECT_ID          = var.firebase_project_id
   }
 
   dynamodb_table_arn        = module.dynamodb.table_arn
@@ -80,7 +79,7 @@ module "lambda" {
 module "lambda_worker" {
   source = "../../modules/lambda"
 
-  environment   = var.environment
+  environment    = var.environment
   function_name  = "${var.app_name}-worker"
   handler        = "bootstrap"
   runtime        = "provided.al2"
@@ -88,10 +87,10 @@ module "lambda_worker" {
   lambda_timeout = 120
 
   environment_variables = {
-    DYNAMODB_TABLE         = module.dynamodb.table_name
-    OPENAI_API_KEY         = var.openai_api_key
-    ENVIRONMENT            = var.environment
-    OPTIMIZATION_QUEUE_URL = module.optimization_queue.queue_url
+    DYNAMODB_TABLE            = module.dynamodb.table_name
+    OPENAI_API_KEY            = var.openai_api_key
+    ENVIRONMENT               = var.environment
+    OPTIMIZATION_QUEUE_URL    = module.optimization_queue.queue_url
     FIREBASE_CREDENTIALS_FILE = var.firebase_credentials_file
     FIREBASE_PROJECT_ID       = var.firebase_project_id
   }

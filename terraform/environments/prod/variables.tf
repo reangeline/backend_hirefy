@@ -40,16 +40,9 @@ variable "stripe_webhook_secret" {
   sensitive   = true
 }
 
-variable "stripe_free_price_id" {
-  description = "Stripe Free Plan Price ID"
+variable "stripe_price_premium_monthly" {
+  description = "Stripe Price ID do plano Premium (US$19,99/mês) — spec 007. Placeholder de teste até o Stripe live de produção ser configurado (ver .spec de billing)."
   type        = string
-  sensitive   = true
-}
-
-variable "stripe_pro_price_id" {
-  description = "Stripe Pro Plan Price ID"
-  type        = string
-  sensitive   = true
 }
 
 variable "ses_from_email" {
