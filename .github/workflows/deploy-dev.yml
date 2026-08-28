@@ -40,9 +40,15 @@ jobs:
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/api/main.go
           zip deployment.zip bootstrap
 
+      - name: Build Worker Lambda
+        run: |
+          rm -f bootstrap
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap cmd/worker/main.go
+          zip deployment-worker.zip bootstrap
+
       - name: Terraform Init
         working-directory: terraform/environments/dev
-        run: terraform init
+        run: terraform init -input=false
 
       - name: Terraform Plan
         working-directory: terraform/environments/dev
@@ -50,7 +56,8 @@ jobs:
           TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-        run: terraform plan -out=tfplan
+          TF_VAR_revenuecat_webhook_secret: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
+        run: terraform plan -input=false -out=tfplan
 
       - name: Terraform Apply
         working-directory: terraform/environments/dev
@@ -58,6 +65,7 @@ jobs:
           TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
           TF_VAR_stripe_webhook_secret: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          TF_VAR_revenuecat_webhook_secret: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
         run: terraform apply -auto-approve tfplan
 
       - name: Get API Endpoint
