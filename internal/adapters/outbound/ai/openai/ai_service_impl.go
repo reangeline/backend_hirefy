@@ -19,7 +19,7 @@ const (
 	defaultModel              = "gpt-4.1-mini" // Parse, salary: cheap and fast
 	optimizationModel         = "gpt-4.1"      // Resume & LinkedIn optimization: higher quality
 	parseMaxTokens            = 800            // Sufficient for parse responses
-	optimizeMaxTokens         = 1800           // Large enough for full optimization JSON
+	optimizeMaxTokens         = 3500           // Full resume rewrite (all experiences/education/projects) + suggestions
 	linkedInMaxTokens         = 3200           // LinkedIn needs more tokens (longer about + suggestions)
 	defaultHTTPTimeout        = 90 * time.Second
 	perAttemptTimeout         = 25 * time.Second // regular calls
