@@ -98,6 +98,55 @@ type CoachResult struct {
 	Type    string // "followup" | "interview_prep" | "offer_insights" | "feedback_request"
 }
 
+// InterviewQuestionInput holds all context needed to generate a practice interview question.
+type InterviewQuestionInput struct {
+	Kind              string // "behavioral" | "technical" | "situational" | "screening"
+	JobTitle          string
+	CompanyName       string
+	JobDescription    string
+	MatchedKeywords   []string
+	MissingKeywords   []string
+	ResumeData        map[string]interface{}
+	PreviousQuestions []string // pra não repetir tema
+	PastGaps          []string // gaps de respostas anteriores, pra mirar nos pontos fracos
+}
+
+// InterviewQuestionResult holds the AI-generated interview question.
+type InterviewQuestionResult struct {
+	Question     string
+	WhatTheyWant string
+	MethodHint   string
+}
+
+// InterviewAnswerInput holds the question and the candidate's answer to be evaluated.
+type InterviewAnswerInput struct {
+	Kind            string
+	Question        string
+	JobTitle        string
+	CompanyName     string
+	JobDescription  string
+	ResumeData      map[string]interface{}
+	CandidateAnswer string
+}
+
+// InterviewStarScores holds the STAR breakdown — only populated for behavioral questions.
+type InterviewStarScores struct {
+	Situation int
+	Task      int
+	Action    int
+	Result    int
+}
+
+// InterviewAnswerResult holds the AI evaluation of a candidate's answer.
+type InterviewAnswerResult struct {
+	ContentScore int
+	Star         *InterviewStarScores // nil se não for behavioral
+	Strengths    []string
+	Gaps         []string
+	ModelAnswer  string
+	FollowUp     string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -107,4 +156,6 @@ type AIService interface {
 	OptimizeForLinkedIn(ctx context.Context, resume *ResumeAnalysis) (*LinkedInOptimizationResult, error)
 	ParseResumeFromText(ctx context.Context, text string) (*PDFResumeData, error)
 	GenerateCoachContent(ctx context.Context, input *CoachJobInput) (*CoachResult, error)
+	GenerateInterviewQuestion(ctx context.Context, input *InterviewQuestionInput) (*InterviewQuestionResult, error)
+	EvaluateInterviewAnswer(ctx context.Context, input *InterviewAnswerInput) (*InterviewAnswerResult, error)
 }

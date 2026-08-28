@@ -703,6 +703,163 @@ Return ONLY a JSON object:
 	}, nil
 }
 
+const interviewMaxTokens = 700
+
+var interviewKindGuidance = map[string]string{
+	"behavioral":  `Past-experience question answerable with STAR ("Tell me about a time..."). Ground it in the candidate's actual resume experience.`,
+	"technical":   "Concrete question about the candidate's actual stack (languages, frameworks, cloud, architecture, trade-offs). Answerable verbally in 2-3 minutes, no whiteboard.",
+	"situational": `"What would you do if..." — a realistic scenario for their seniority (production incident, conflicting priorities, disagreement with a tech lead, scope creep).`,
+	"screening":   "Fit/intro question (tell me about yourself, why this role, why this company, salary expectations) — reference the company/role when known.",
+}
+
+func (s *aiServiceImpl) GenerateInterviewQuestion(ctx context.Context, input *outbound.InterviewQuestionInput) (*outbound.InterviewQuestionResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+	previousJSON, _ := json.Marshal(input.PreviousQuestions)
+	gapsJSON, _ := json.Marshal(input.PastGaps)
+
+	kind := strings.ToLower(input.Kind)
+	guidance := interviewKindGuidance[kind]
+	if guidance == "" {
+		kind = "behavioral"
+		guidance = interviewKindGuidance[kind]
+	}
+
+	prompt := fmt.Sprintf(`You are a realistic interviewer for tech roles, helping a candidate practice for a real interview.
+
+Generate ONE %s interview question. %s
+
+Candidate's resume data (JSON): %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Matched keywords/skills: %s
+Missing keywords/skills: %s
+Questions already asked in this practice session (do NOT repeat the theme): %s
+Weak spots from past answers in this session (probe these if relevant): %s
+
+Return ONLY a JSON object:
+{"question": "the interview question, in natural spoken English",
+ "what_they_want": "one sentence — what the interviewer is really assessing",
+ "method_hint": "one sentence structure tip (STAR for behavioral, otherwise a short structure like 'answer -> trade-offs -> example')"}`,
+		kind, guidance, string(resumeJSON), input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600),
+		strings.Join(input.MatchedKeywords, ", "),
+		strings.Join(input.MissingKeywords, ", "),
+		string(previousJSON), string(gapsJSON),
+	)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, interviewMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		Question     string `json:"question"`
+		WhatTheyWant string `json:"what_they_want"`
+		MethodHint   string `json:"method_hint"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse interview question response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse interview question response (cleaned): %w", err2)
+		}
+	}
+	if raw.Question == "" {
+		return nil, fmt.Errorf("AI returned empty interview question")
+	}
+
+	return &outbound.InterviewQuestionResult{
+		Question:     raw.Question,
+		WhatTheyWant: raw.WhatTheyWant,
+		MethodHint:   raw.MethodHint,
+	}, nil
+}
+
+func (s *aiServiceImpl) EvaluateInterviewAnswer(ctx context.Context, input *outbound.InterviewAnswerInput) (*outbound.InterviewAnswerResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+	isBehavioral := strings.EqualFold(input.Kind, "behavioral")
+
+	starInstruction := `"star": null,`
+	behavioralNote := ""
+	if isBehavioral {
+		starInstruction = `"star": {"situation": <int 0-100>, "task": <int 0-100>, "action": <int 0-100>, "result": <int 0-100>},`
+		behavioralNote = "This is a behavioral question — score each STAR component separately based on how clearly the candidate covered it."
+	}
+
+	prompt := fmt.Sprintf(`You are a tough-but-fair interview coach evaluating a candidate's practice answer.
+
+Question kind: %s
+Question: %s
+Candidate's resume data (JSON): %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Candidate's answer: %s
+
+Evaluate the CONTENT of the answer (not English/grammar — this is about substance, not language).
+%s
+Format (JSON):
+{"content_score": <int 0-100>,
+ %s
+ "strengths": ["...", "..."],
+ "gaps": ["what's missing: metrics, ownership, specificity, structure"],
+ "model_answer": "a strong answer to THIS question using the candidate's REAL resume facts, in natural spoken professional English, STAR-shaped if behavioral",
+ "follow_up": "the follow-up question a real interviewer would ask next"}
+Be honest — a rambling answer without a clear outcome should score low on content_score.`,
+		input.Kind, input.Question, string(resumeJSON), input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600), input.CandidateAnswer,
+		behavioralNote, starInstruction,
+	)
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.5, interviewMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		ContentScore int `json:"content_score"`
+		Star         *struct {
+			Situation int `json:"situation"`
+			Task      int `json:"task"`
+			Action    int `json:"action"`
+			Result    int `json:"result"`
+		} `json:"star"`
+		Strengths   []string `json:"strengths"`
+		Gaps        []string `json:"gaps"`
+		ModelAnswer string   `json:"model_answer"`
+		FollowUp    string   `json:"follow_up"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse interview answer evaluation: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse interview answer evaluation (cleaned): %w", err2)
+		}
+	}
+
+	result := &outbound.InterviewAnswerResult{
+		ContentScore: raw.ContentScore,
+		Strengths:    raw.Strengths,
+		Gaps:         raw.Gaps,
+		ModelAnswer:  raw.ModelAnswer,
+		FollowUp:     raw.FollowUp,
+	}
+	if raw.Star != nil {
+		result.Star = &outbound.InterviewStarScores{
+			Situation: raw.Star.Situation,
+			Task:      raw.Star.Task,
+			Action:    raw.Star.Action,
+			Result:    raw.Star.Result,
+		}
+	}
+	return result, nil
+}
+
 // truncate shortens a string to at most n runes.
 func truncate(s string, n int) string {
 	runes := []rune(s)

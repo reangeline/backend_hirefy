@@ -50,6 +50,7 @@ func init() {
 	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
 	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
+	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -83,6 +84,7 @@ func init() {
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret, cfg.StripePricePremiumMonthly)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	interviewPracticeService := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -103,6 +105,7 @@ func init() {
 		userRepo,
 		fcmNotifier,
 		pipelineCoachService,
+		interviewPracticeService,
 	)
 
 	// Configura Lambda adapter
@@ -139,6 +142,7 @@ func runLocalServer() {
 	jobRepo := dynamodb.NewOptimizationJobRepository(dynamoClient)
 	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
+	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
@@ -171,6 +175,7 @@ func runLocalServer() {
 
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	interviewPracticeSvc := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -184,6 +189,7 @@ func runLocalServer() {
 		userRepo,
 		fcmNotifier,
 		pipelineCoachSvc,
+		interviewPracticeSvc,
 	)
 
 	port := os.Getenv("PORT")

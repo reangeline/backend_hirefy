@@ -25,6 +25,7 @@ func NewRouter(
 	userRepo outbound.UserRepository,
 	notifier outbound.NotificationPublisher,
 	pipelineCoachService inbound.PipelineCoachService,
+	interviewPracticeService inbound.InterviewPracticeService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -62,7 +63,7 @@ func NewRouter(
 	webhookHandler := handler.NewWebhookHandler(paymentService)
 	revenueCatWebhookHandler := handler.NewRevenueCatWebhookHandler(revenueCatService)
 	userHandler := handler.NewUserHandler(userService)
-	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService)
+	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService, interviewPracticeService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -133,6 +134,11 @@ func NewRouter(
 			r.Get("/pipeline/{jobId}/contacts", pipelineHandler.ListContacts)
 			r.Post("/pipeline/{jobId}/contacts", pipelineHandler.AddContact)
 			r.Delete("/pipeline/{jobId}/contacts/{contactId}", pipelineHandler.DeleteContact)
+			// Prática de entrevista (spec 010) — "interview-practice" pra não colidir com
+			// POST /pipeline/{jobId}/interview, que é o registro de uma entrevista agendada.
+			r.Get("/pipeline/{jobId}/interview-practice", pipelineHandler.ListInterviewQuestions)
+			r.Post("/pipeline/{jobId}/interview-practice/question", pipelineHandler.NextInterviewQuestion)
+			r.Post("/pipeline/{jobId}/interview-practice/{questionId}/answer", pipelineHandler.SubmitInterviewAnswer)
 		})
 	})
 

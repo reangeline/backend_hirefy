@@ -24,10 +24,11 @@ var (
 	// Job errors
 	ErrJobNotFound = errors.New("optimization job not found")
 
-        // Pipeline errors
-        ErrPipelineJobNotFound = errors.New("pipeline job not found")
-	ErrPaymentFailed        = errors.New("payment failed")
-	ErrInvalidPaymentMethod = errors.New("invalid payment method")
+	// Pipeline errors
+	ErrPipelineJobNotFound       = errors.New("pipeline job not found")
+	ErrInterviewQuestionNotFound = errors.New("interview question not found")
+	ErrPaymentFailed             = errors.New("payment failed")
+	ErrInvalidPaymentMethod      = errors.New("invalid payment method")
 
 	// Authorization errors
 	ErrUnauthorized = errors.New("unauthorized")

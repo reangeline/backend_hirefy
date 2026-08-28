@@ -16,11 +16,12 @@ import (
 )
 
 type PipelineHandler struct {
-	pipelineRepo outbound.PipelineRepository
-	contactRepo  outbound.ContactRepository
-	userRepo     outbound.UserRepository
-	notifier     outbound.NotificationPublisher
-	coachService inbound.PipelineCoachService
+	pipelineRepo     outbound.PipelineRepository
+	contactRepo      outbound.ContactRepository
+	userRepo         outbound.UserRepository
+	notifier         outbound.NotificationPublisher
+	coachService     inbound.PipelineCoachService
+	interviewService inbound.InterviewPracticeService
 }
 
 func NewPipelineHandler(
@@ -29,13 +30,15 @@ func NewPipelineHandler(
 	userRepo outbound.UserRepository,
 	notifier outbound.NotificationPublisher,
 	coachService inbound.PipelineCoachService,
+	interviewService inbound.InterviewPracticeService,
 ) *PipelineHandler {
 	return &PipelineHandler{
-		pipelineRepo: pipelineRepo,
-		contactRepo:  contactRepo,
-		userRepo:     userRepo,
-		notifier:     notifier,
-		coachService: coachService,
+		pipelineRepo:     pipelineRepo,
+		contactRepo:      contactRepo,
+		userRepo:         userRepo,
+		notifier:         notifier,
+		coachService:     coachService,
+		interviewService: interviewService,
 	}
 }
 
@@ -73,17 +76,17 @@ type PipelineJobResponse struct {
 }
 
 type createPipelineJobRequest struct {
-	CompanyName    string `json:"company_name"`
-	JobTitle       string `json:"job_title"`
-	Location       string `json:"location,omitempty"`
-	Stage          string `json:"stage,omitempty"`
-	ResumeID       string `json:"resume_id,omitempty"`
-	AtsScore       int    `json:"ats_score,omitempty"`
+	CompanyName     string   `json:"company_name"`
+	JobTitle        string   `json:"job_title"`
+	Location        string   `json:"location,omitempty"`
+	Stage           string   `json:"stage,omitempty"`
+	ResumeID        string   `json:"resume_id,omitempty"`
+	AtsScore        int      `json:"ats_score,omitempty"`
 	MatchedKeywords []string `json:"matched_keywords,omitempty"`
 	MissingKeywords []string `json:"missing_keywords,omitempty"`
-	JobDescription string `json:"job_description,omitempty"`
-	JobURL         string `json:"job_url,omitempty"`
-	IsArchived     bool   `json:"is_archived,omitempty"`
+	JobDescription  string   `json:"job_description,omitempty"`
+	JobURL          string   `json:"job_url,omitempty"`
+	IsArchived      bool     `json:"is_archived,omitempty"`
 }
 
 type updatePipelineJobRequest struct {
@@ -138,7 +141,7 @@ func toPipelineJobResponse(job *domain.PipelineJob) PipelineJobResponse {
 		UpdatedAt:         job.UpdatedAt.Format(time.RFC3339),
 	}
 	if job.InterviewAt != nil {
-			s := job.InterviewAt.UTC().Format(iso8601MillisLayout)
+		s := job.InterviewAt.UTC().Format(iso8601MillisLayout)
 		resp.InterviewAt = &s
 	}
 	if len(job.Timeline) > 0 {
@@ -199,21 +202,21 @@ func (h *PipelineHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	job := &domain.PipelineJob{
-		ID:             uuid.New().String(),
-		UserID:         userID,
-		CompanyName:    req.CompanyName,
-		JobTitle:       req.JobTitle,
-		Location:       req.Location,
-		Stage:          stage,
-		ResumeID:       req.ResumeID,
-		AtsScore:       req.AtsScore,
+		ID:              uuid.New().String(),
+		UserID:          userID,
+		CompanyName:     req.CompanyName,
+		JobTitle:        req.JobTitle,
+		Location:        req.Location,
+		Stage:           stage,
+		ResumeID:        req.ResumeID,
+		AtsScore:        req.AtsScore,
 		MatchedKeywords: req.MatchedKeywords,
 		MissingKeywords: req.MissingKeywords,
-		JobDescription: req.JobDescription,
-		JobURL:         req.JobURL,
-		IsArchived:     req.IsArchived,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		JobDescription:  req.JobDescription,
+		JobURL:          req.JobURL,
+		IsArchived:      req.IsArchived,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	// Add initial timeline event
@@ -701,4 +704,105 @@ func (h *PipelineHandler) GetPipelineAnalytics(w http.ResponseWriter, r *http.Re
 
 	result := analytics.Compute(jobs)
 	respondJSON(w, http.StatusOK, result)
+}
+
+// ─── Interview Practice ──────────────────────────────────────────────────────
+
+type nextInterviewQuestionRequest struct {
+	Kind string `json:"kind"`
+}
+
+type submitInterviewAnswerRequest struct {
+	Answer string `json:"answer"`
+}
+
+func respondInterviewError(w http.ResponseWriter, jobID string, err error) {
+	log.Printf("[interview] jobID=%s error=%T: %v", jobID, err, err)
+	switch err {
+	case domain.ErrPipelineJobNotFound:
+		respondError(w, http.StatusNotFound, "pipeline job not found")
+	case domain.ErrInterviewQuestionNotFound:
+		respondError(w, http.StatusNotFound, "interview question not found")
+	case domain.ErrSubscriptionNotFound:
+		respondError(w, http.StatusForbidden, "subscription not found")
+	case domain.ErrSubscriptionInactive:
+		respondError(w, http.StatusForbidden, "subscription inactive")
+	case domain.ErrInsufficientCredits:
+		respondError(w, http.StatusPaymentRequired, "insufficient credits")
+	case domain.ErrForbidden:
+		respondError(w, http.StatusUnprocessableEntity, "interview practice not available for this stage")
+	default:
+		respondError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func (h *PipelineHandler) ListInterviewQuestions(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok || userID == "" {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	jobID := chi.URLParam(r, "jobId")
+
+	history, err := h.interviewService.ListHistory(r.Context(), userID, jobID)
+	if err != nil {
+		respondInterviewError(w, jobID, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, history)
+}
+
+func (h *PipelineHandler) NextInterviewQuestion(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok || userID == "" {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	jobID := chi.URLParam(r, "jobId")
+
+	var req nextInterviewQuestionRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	question, err := h.interviewService.NextQuestion(r.Context(), inbound.NextQuestionRequest{
+		UserID: userID,
+		JobID:  jobID,
+		Kind:   req.Kind,
+	})
+	if err != nil {
+		respondInterviewError(w, jobID, err)
+		return
+	}
+	respondJSON(w, http.StatusCreated, question)
+}
+
+func (h *PipelineHandler) SubmitInterviewAnswer(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok || userID == "" {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	jobID := chi.URLParam(r, "jobId")
+	questionID := chi.URLParam(r, "questionId")
+
+	var req submitInterviewAnswerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Answer == "" {
+		respondError(w, http.StatusBadRequest, "answer is required")
+		return
+	}
+
+	question, err := h.interviewService.SubmitAnswer(r.Context(), inbound.SubmitAnswerRequest{
+		UserID:     userID,
+		JobID:      jobID,
+		QuestionID: questionID,
+		Answer:     req.Answer,
+	})
+	if err != nil {
+		respondInterviewError(w, jobID, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, question)
 }
