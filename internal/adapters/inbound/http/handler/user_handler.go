@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/middleware"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 )
 
@@ -19,7 +20,7 @@ func NewUserHandler(userService inbound.UserService) *UserHandler {
 
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	// Pegar userID do contexto (adicionado pelo middleware)
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "user not found in context")
 		return
@@ -49,7 +50,7 @@ type updateFCMTokenRequest struct {
 }
 
 func (h *UserHandler) UpdateFCMToken(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "user not found in context")
 		return
@@ -79,7 +80,7 @@ type updateMeRequest struct {
 }
 
 func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "user not found in context")
 		return
@@ -111,7 +112,7 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "user not found in context")
 		return

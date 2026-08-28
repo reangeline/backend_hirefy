@@ -8,6 +8,13 @@ import (
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 )
 
+type contextKey string
+
+const (
+	UserIDContextKey contextKey = "user_id"
+	UserContextKey   contextKey = "user"
+)
+
 func AuthMiddleware(authService inbound.AuthService, userService inbound.UserService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +47,8 @@ func AuthMiddleware(authService inbound.AuthService, userService inbound.UserSer
 			}
 
 			// Adiciona userID ao contexto
-			ctx := context.WithValue(r.Context(), "user_id", user.ID)
-			ctx = context.WithValue(ctx, "user", user)
+			ctx := context.WithValue(r.Context(), UserIDContextKey, user.ID)
+			ctx = context.WithValue(ctx, UserContextKey, user)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

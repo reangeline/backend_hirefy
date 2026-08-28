@@ -195,7 +195,7 @@ func (s *authServiceImpl) ConfirmSignUp(ctx context.Context, req inbound.Confirm
 
 	// 2. Verificar se expirou
 	if verificationCode.IsExpired() {
-		s.verificationRepo.Delete(ctx, req.Email)
+		_ = s.verificationRepo.Delete(ctx, req.Email)
 		return fmt.Errorf("verification code expired")
 	}
 
@@ -205,7 +205,7 @@ func (s *authServiceImpl) ConfirmSignUp(ctx context.Context, req inbound.Confirm
 	}
 
 	// 4. Deletar código usado
-	s.verificationRepo.Delete(ctx, req.Email)
+	_ = s.verificationRepo.Delete(ctx, req.Email)
 
 	// 5. Marcar email como verificado no DynamoDB
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
@@ -246,7 +246,7 @@ func (s *authServiceImpl) ResendConfirmationCode(ctx context.Context, req inboun
 	}
 
 	// 3. ✅ Deletar código antigo (se existir)
-	s.verificationRepo.Delete(ctx, req.Email)
+	_ = s.verificationRepo.Delete(ctx, req.Email)
 
 	// 4. ✅ Gerar novo código
 	verificationCode := domain.NewVerificationCode(req.Email)

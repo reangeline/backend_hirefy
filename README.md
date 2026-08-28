@@ -250,3 +250,24 @@ make build
 # Deploy Lambda functions directly (prod)
 make deploy-aws
 ```
+
+The `make` targets above are for local/manual use (emergencies, one-off debugging). The
+standard path is git-based, via GitHub Actions (`.github/workflows/`):
+
+## Git Workflow (gitflow)
+
+- `develop` — active development. Every push/PR here runs `ci.yml` (test + lint + build) and,
+  on push, `deploy-dev.yml` (`terraform apply` against `terraform/environments/dev`).
+- `main` — production only. Every push/PR here runs `ci.yml`; on push, `deploy-prod.yml` runs
+  `terraform apply` against `terraform/environments/prod`, gated behind the `production`
+  GitHub Environment, which requires manual approval before the job proceeds.
+- Any PR touching `terraform/**` also runs `terraform-plan.yml` so the plan is visible in the
+  PR before merge.
+- Both `main` and `develop` have branch protection: no direct pushes, PR required, `ci.yml`
+  must pass.
+
+```
+feature/fix → PR into develop → CI green → merge → auto-deploy to dev → validate
+            → PR develop → main → CI (+ terraform plan) → merge
+            → approve the "production" Environment → terraform apply (prod)
+```

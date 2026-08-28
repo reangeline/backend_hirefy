@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/reangeline/backend_applywise/internal/adapters/inbound/http/middleware"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 )
@@ -24,7 +25,7 @@ type CreateSubscriptionRequestDTO struct {
 }
 
 func (h *SubscriptionHandler) GetSubscription(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	subscription, err := h.subscriptionService.GetSubscriptionByUserID(r.Context(), userID)
 	if err != nil {
@@ -40,7 +41,7 @@ func (h *SubscriptionHandler) GetSubscription(w http.ResponseWriter, r *http.Req
 }
 
 func (h *SubscriptionHandler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	var req CreateSubscriptionRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -74,7 +75,7 @@ func (h *SubscriptionHandler) CreateSubscription(w http.ResponseWriter, r *http.
 }
 
 func (h *SubscriptionHandler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	if err := h.subscriptionService.CancelSubscription(r.Context(), userID); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -87,7 +88,7 @@ func (h *SubscriptionHandler) CancelSubscription(w http.ResponseWriter, r *http.
 }
 
 func (h *SubscriptionHandler) CheckStatus(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	isActive, err := h.subscriptionService.CheckSubscriptionStatus(r.Context(), userID)
 	if err != nil {
@@ -103,8 +104,8 @@ func (h *SubscriptionHandler) CheckStatus(w http.ResponseWriter, r *http.Request
 func (h *SubscriptionHandler) CreateCheckout(w http.ResponseWriter, r *http.Request) {
 	// Não lê price_id do corpo — o cliente não escolhe o preço, o backend sempre usa o
 	// Price ID do Premium configurado no servidor (achado de segurança, spec 007).
-	userID := r.Context().Value("user_id").(string)
-	user := r.Context().Value("user").(*domain.User)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
+	user := r.Context().Value(middleware.UserContextKey).(*domain.User)
 
 	// Criar checkout session
 	checkoutURL, err := h.subscriptionService.CreateCheckoutSession(r.Context(), inbound.CreateCheckoutRequest{
@@ -123,7 +124,7 @@ func (h *SubscriptionHandler) CreateCheckout(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *SubscriptionHandler) GetCredits(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(middleware.UserIDContextKey).(string)
 
 	// Buscar subscription para obter saldo de créditos
 	subscription, err := h.subscriptionService.GetSubscriptionByUserID(r.Context(), userID)

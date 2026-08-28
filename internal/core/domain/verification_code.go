@@ -17,7 +17,7 @@ type VerificationCode struct {
 func GenerateVerificationCode() string {
 	// Gerar 6 dígitos aleatórios
 	b := make([]byte, 3)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	code := fmt.Sprintf("%06d", int(b[0])<<16|int(b[1])<<8|int(b[2]))
 	return code[:6]
 }
