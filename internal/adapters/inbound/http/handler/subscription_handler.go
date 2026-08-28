@@ -101,24 +101,15 @@ func (h *SubscriptionHandler) CheckStatus(w http.ResponseWriter, r *http.Request
 }
 
 func (h *SubscriptionHandler) CreateCheckout(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		PriceID string `json:"price_id" validate:"required"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	// Pegar user do contexto
+	// Não lê price_id do corpo — o cliente não escolhe o preço, o backend sempre usa o
+	// Price ID do Premium configurado no servidor (achado de segurança, spec 007).
 	userID := r.Context().Value("user_id").(string)
 	user := r.Context().Value("user").(*domain.User)
 
 	// Criar checkout session
 	checkoutURL, err := h.subscriptionService.CreateCheckoutSession(r.Context(), inbound.CreateCheckoutRequest{
-		UserID:  userID,
-		Email:   user.Email,
-		PriceID: req.PriceID,
+		UserID: userID,
+		Email:  user.Email,
 	})
 
 	if err != nil {

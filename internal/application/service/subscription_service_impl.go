@@ -15,6 +15,7 @@ type subscriptionServiceImpl struct {
 	paymentGateway        outbound.PaymentGateway
 	userRepo              outbound.UserRepository
 	creditTransactionRepo outbound.CreditTransactionRepository
+	premiumPriceID        string
 }
 
 func NewSubscriptionService(
@@ -22,12 +23,14 @@ func NewSubscriptionService(
 	paymentGateway outbound.PaymentGateway,
 	userRepo outbound.UserRepository,
 	creditTransactionRepo outbound.CreditTransactionRepository,
+	premiumPriceID string,
 ) inbound.SubscriptionService {
 	return &subscriptionServiceImpl{
 		subscriptionRepo:      subscriptionRepo,
 		paymentGateway:        paymentGateway,
 		userRepo:              userRepo,
 		creditTransactionRepo: creditTransactionRepo,
+		premiumPriceID:        premiumPriceID,
 	}
 }
 
@@ -62,14 +65,12 @@ func (s *subscriptionServiceImpl) CreateSubscription(
 		}
 	}
 
-	// Mapeia plan para priceID do Stripe
-	priceID := s.getPriceIDForPlan(req.Plan)
-
-	// Cria subscription no Stripe
+	// Cria subscription no Stripe — só existe 1 plano pago (Premium) hoje, ver
+	// .spec/007-stripe-billing na web-app
 	stripeSubID, err := s.paymentGateway.CreateSubscription(
 		ctx,
 		stripeCustomerID,
-		priceID,
+		s.premiumPriceID,
 	)
 	if err != nil {
 		return nil, domain.ErrPaymentFailed
@@ -140,22 +141,14 @@ func (s *subscriptionServiceImpl) CreateCheckoutSession(ctx context.Context, req
 		return "", domain.ErrUserNotFound
 	}
 
-	// Criar checkout session no Stripe
-	checkoutURL, err := s.paymentGateway.CreateCheckoutSession(ctx, user.ID, user.Email, req.PriceID)
+	// Criar checkout session no Stripe — o price_id nunca vem do cliente (achado de
+	// segurança da spec 007), sempre é o Premium configurado no servidor
+	checkoutURL, err := s.paymentGateway.CreateCheckoutSession(ctx, user.ID, user.Email, s.premiumPriceID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create checkout session: %w", err)
 	}
 
 	return checkoutURL, nil
-}
-
-func (s *subscriptionServiceImpl) getPriceIDForPlan(plan domain.SubscriptionPlan) string {
-	// TODO: Buscar de variáveis de ambiente
-	priceIDs := map[domain.SubscriptionPlan]string{
-		domain.PlanBasic:   "price_basic_monthly",
-		domain.PlanPremium: "price_premium_monthly",
-	}
-	return priceIDs[plan]
 }
 
 func (s *subscriptionServiceImpl) GetCreditHistory(ctx context.Context, userID string, limit int) ([]*domain.CreditTransaction, error) {

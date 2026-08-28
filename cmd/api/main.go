@@ -64,7 +64,7 @@ func init() {
 	})
 
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
-	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
+	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
 
 	// Inicializa services (application layer)
@@ -79,8 +79,8 @@ func init() {
 		resumeRepo,
 	)
 
-	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
-	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
+	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo, cfg.StripePricePremiumMonthly)
+	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret, cfg.StripePricePremiumMonthly)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
 	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 
@@ -140,7 +140,7 @@ func runLocalServer() {
 	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
-	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey)
+	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
@@ -160,8 +160,8 @@ func runLocalServer() {
 	userService := appservice.NewUserService(userRepo, resumeRepo, objectStorage, cognitoClient, subscriptionRepo, verificationRepo)
 	authService := appservice.NewAuthService(cognitoClient, userRepo, subscriptionRepo, verificationRepo, emailService, resumeRepo)
 
-	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo)
-	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret)
+	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo, cfg.StripePricePremiumMonthly)
+	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret, cfg.StripePricePremiumMonthly)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -198,16 +198,23 @@ func runLocalServer() {
 }
 
 func loadConfig() *appconfig.Config {
+	webAppBaseURL := os.Getenv("WEB_APP_BASE_URL")
+	if webAppBaseURL == "" {
+		webAppBaseURL = "http://localhost:3000"
+	}
+
 	return &appconfig.Config{
-		DynamoDBTable:        os.Getenv("DYNAMODB_TABLE"),
-		CognitoUserPoolID:    os.Getenv("COGNITO_USER_POOL_ID"),
-		CognitoClientID:      os.Getenv("COGNITO_CLIENT_ID"),
-		ResumesBucketName:    os.Getenv("RESUMES_BUCKET_NAME"),
-		StripeSecretKey:      os.Getenv("STRIPE_SECRET_KEY"),
-		StripeWebhookSecret:  os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),
-		OptimizationQueueURL: os.Getenv("OPTIMIZATION_QUEUE_URL"),
-		FirebaseCredentials:  os.Getenv("FIREBASE_CREDENTIALS_FILE"),
-		FirebaseProjectID:    os.Getenv("FIREBASE_PROJECT_ID"),
+		DynamoDBTable:             os.Getenv("DYNAMODB_TABLE"),
+		CognitoUserPoolID:         os.Getenv("COGNITO_USER_POOL_ID"),
+		CognitoClientID:           os.Getenv("COGNITO_CLIENT_ID"),
+		ResumesBucketName:         os.Getenv("RESUMES_BUCKET_NAME"),
+		StripeSecretKey:           os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret:       os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		StripePricePremiumMonthly: os.Getenv("STRIPE_PRICE_PREMIUM_MONTHLY"),
+		WebAppBaseURL:             webAppBaseURL,
+		OpenAIKey:                 os.Getenv("OPENAI_API_KEY"),
+		OptimizationQueueURL:      os.Getenv("OPTIMIZATION_QUEUE_URL"),
+		FirebaseCredentials:       os.Getenv("FIREBASE_CREDENTIALS_FILE"),
+		FirebaseProjectID:         os.Getenv("FIREBASE_PROJECT_ID"),
 	}
 }

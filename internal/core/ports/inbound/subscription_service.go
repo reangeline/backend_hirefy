@@ -12,10 +12,12 @@ type CreateSubscriptionRequest struct {
 	PaymentMethod string // Stripe payment method ID
 }
 
+// CreateCheckoutRequest — sem PriceID de propósito: o cliente não escolhe o preço, o
+// backend sempre usa o Price ID do Premium configurado no servidor (ver
+// .spec/007-stripe-billing na web-app). Só existe 1 plano pago hoje.
 type CreateCheckoutRequest struct {
-	UserID  string
-	Email   string
-	PriceID string
+	UserID string
+	Email  string
 }
 
 type SubscriptionService interface {

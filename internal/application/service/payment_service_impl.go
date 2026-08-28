@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
@@ -16,17 +15,20 @@ type paymentServiceImpl struct {
 	paymentGateway   outbound.PaymentGateway
 	subscriptionRepo outbound.SubscriptionRepository
 	webhookSecret    string
+	premiumPriceID   string
 }
 
 func NewPaymentService(
 	paymentGateway outbound.PaymentGateway,
 	subscriptionRepo outbound.SubscriptionRepository,
 	webhookSecret string,
+	premiumPriceID string,
 ) inbound.PaymentService {
 	return &paymentServiceImpl{
 		paymentGateway:   paymentGateway,
 		subscriptionRepo: subscriptionRepo,
 		webhookSecret:    webhookSecret,
+		premiumPriceID:   premiumPriceID,
 	}
 }
 
@@ -41,19 +43,6 @@ func (s *paymentServiceImpl) CreatePaymentMethod(ctx context.Context, req inboun
 	return req.PaymentToken, nil
 }
 
-func (s *paymentServiceImpl) CreateCheckoutSession(ctx context.Context, req inbound.CreateCheckoutSessionRequest) (string, error) {
-	// Mapeia plan para priceID
-	priceID := s.getPriceIDForPlan(req.Plan)
-
-	// CreateCheckoutSession agora aceita apenas userID, email, priceID
-	// As URLs são fixas no adapter
-	return s.paymentGateway.CreateCheckoutSession(
-		ctx,
-		req.UserID, // Assumindo que existe no request
-		req.Email,  // Assumindo que existe no request
-		priceID,
-	)
-}
 func (s *paymentServiceImpl) HandleWebhook(ctx context.Context, payload []byte, signature string) error {
 	// Verifica a assinatura do webhook
 	if err := s.paymentGateway.VerifyWebhookSignature(payload, signature, s.webhookSecret); err != nil {
@@ -114,29 +103,35 @@ func (s *paymentServiceImpl) handleCheckoutCompleted(ctx context.Context, data m
 		return nil
 	}
 
-	// Verifica se a subscription já existe
-	existingSub, err := s.subscriptionRepo.GetByStripeSubscriptionID(ctx, subscriptionID)
-	if err == nil && existingSub != nil {
-		// Já existe, apenas ativa
-		existingSub.Status = domain.SubscriptionStatusActive
-		existingSub.UpdatedAt = time.Now()
-		return s.subscriptionRepo.Update(ctx, existingSub)
+	// Confirma qual price_id foi realmente comprado direto no Stripe, em vez de confiar no
+	// payload do evento — só ativamos Premium se bater com o price configurado no servidor
+	// (achado de segurança, spec 007: nunca assumir o plano sem checar).
+	priceID, err := s.paymentGateway.GetSubscriptionPriceID(ctx, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("failed to verify subscription price: %w", err)
+	}
+	if priceID != s.premiumPriceID {
+		return fmt.Errorf("checkout completed with unexpected price_id %q (expected premium %q)", priceID, s.premiumPriceID)
 	}
 
-	// Cria nova subscription
-	subscription := &domain.Subscription{
-		ID:               uuid.New().String(),
-		UserID:           userID,
-		Plan:             s.getPlanFromPriceID(data), // Detecta o plano automaticamente
-		Status:           domain.SubscriptionStatusActive,
-		StripeCustomerID: customerID,
-		StripeSubID:      subscriptionID,
-		CurrentPeriodEnd: time.Now().AddDate(0, 1, 0), // 1 mês
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+	// Atualiza a subscription que o usuário já tem (toda conta ganha uma linha Free no
+	// signup — ver NewSubscription) em vez de criar uma segunda linha pro mesmo usuário.
+	// Achado spec 007: criar uma nova linha aqui deixava 2 registros SUB# por usuário, e
+	// GetByUserID (Query com Limit:1, sem ordenação por data) podia retornar a linha Free
+	// antiga em vez da Premium nova, fazendo o upgrade parecer que não tinha funcionado.
+	existingSub, err := s.subscriptionRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to load existing subscription for user %s: %w", userID, err)
 	}
 
-	return s.subscriptionRepo.Create(ctx, subscription)
+	existingSub.Plan = domain.PlanPremium
+	existingSub.Status = domain.SubscriptionStatusActive
+	existingSub.StripeCustomerID = customerID
+	existingSub.StripeSubID = subscriptionID
+	existingSub.CurrentPeriodEnd = time.Now().AddDate(0, 1, 0) // 1 mês
+	existingSub.UpdatedAt = time.Now()
+
+	return s.subscriptionRepo.Update(ctx, existingSub)
 }
 
 func (s *paymentServiceImpl) handleSubscriptionUpdated(ctx context.Context, data map[string]interface{}) error {
@@ -226,23 +221,4 @@ func (s *paymentServiceImpl) handlePaymentFailed(ctx context.Context, data map[s
 	subscription.UpdatedAt = time.Now()
 
 	return s.subscriptionRepo.Update(ctx, subscription)
-}
-
-func (s *paymentServiceImpl) getPriceIDForPlan(plan string) string {
-	// TODO: Buscar de variáveis de ambiente
-	priceIDs := map[string]string{
-		"basic":   "price_basic_monthly",
-		"premium": "price_premium_monthly",
-	}
-	return priceIDs[plan]
-}
-
-func (s *paymentServiceImpl) getPlanFromPriceID(data map[string]interface{}) domain.SubscriptionPlan {
-	// Extrai o priceID do line_items ou usa default
-	// Por enquanto, retorna o plano premium/básico
-	// TODO: Mapear corretamente do priceID
-
-	// Se você tiver PlanBasic ou PlanPremium, use um deles
-	// Caso contrário, veja qual constante existe em domain.SubscriptionPlan
-	return domain.PlanPremium // ou domain.PlanBasic, dependendo do que existir
 }

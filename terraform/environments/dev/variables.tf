@@ -40,16 +40,15 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
-variable "stripe_free_price_id" {
-  description = "Stripe Free Plan Price ID"
+variable "stripe_price_premium_monthly" {
+  description = "Stripe Price ID do plano Premium (US$19,99/mês) — spec 007"
   type        = string
-  sensitive   = true
 }
 
-variable "stripe_pro_price_id" {
-  description = "Stripe Pro Plan Price ID"
+variable "web_app_base_url" {
+  description = "Base URL do web-app, usada nas URLs de sucesso/cancelamento do Stripe Checkout"
   type        = string
-  sensitive   = true
+  default     = "http://localhost:3000"
 }
 
 variable "ses_from_email" {

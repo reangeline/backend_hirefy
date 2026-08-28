@@ -78,14 +78,15 @@ resource "aws_cognito_user_pool_client" "main" {
   }
 }
 
-# Referencia o email verificado no SES criado manualmente no console
-data "aws_ses_email_identity" "from_email" {
-  email = var.ses_from_email
+# Policy que autoriza o Cognito a enviar emails via SES. A identidade verificada no SES é o
+# domínio (não o endereço específico) — usar o email aqui falha com "Invalid identity. Must
+# be a verified email address or domain".
+locals {
+  ses_from_domain = split("@", var.ses_from_email)[1]
 }
 
-# Policy que autoriza o Cognito a enviar emails via SES
 resource "aws_ses_identity_policy" "cognito_send_email" {
-  identity = var.ses_from_email
+  identity = local.ses_from_domain
   name     = "cognito-send-email"
 
   policy = jsonencode({
@@ -98,7 +99,7 @@ resource "aws_ses_identity_policy" "cognito_send_email" {
           Service = "email.cognito-idp.amazonaws.com"
         }
         Action   = "ses:SendEmail"
-        Resource = "arn:aws:ses:us-east-1:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}"
+        Resource = "arn:aws:ses:us-east-1:${data.aws_caller_identity.current.account_id}:identity/${local.ses_from_domain}"
       }
     ]
   })
