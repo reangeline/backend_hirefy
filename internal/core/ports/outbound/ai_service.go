@@ -201,6 +201,29 @@ type LinkedInScanResult struct {
 	Tips            []string
 }
 
+// PostTopicsInput holds the candidate data used to suggest LinkedIn post topics (spec 018).
+type PostTopicsInput struct {
+	Resume     *ResumeAnalysis
+	TargetRole string // opcional — se vazio, a IA infere do currículo
+}
+
+// PostTopicsResult is the structured list of suggested topics.
+type PostTopicsResult struct {
+	Topics []domain.LinkedInPostTopic
+}
+
+// PostDraftInput holds the candidate data and the chosen topic to draft a post about.
+type PostDraftInput struct {
+	Resume     *ResumeAnalysis
+	TopicTitle string
+	TopicAngle string
+}
+
+// PostDraftResult is the AI-drafted, ready-to-paste LinkedIn post.
+type PostDraftResult struct {
+	PostText string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -215,4 +238,6 @@ type AIService interface {
 	SuggestApplyAnswer(ctx context.Context, input *ApplyAssistAnswerInput) (*ApplyAssistAnswerResult, error)
 	SuggestResumeAddition(ctx context.Context, input *ResumeAdditionInput) (*ResumeAdditionResult, error)
 	ScanLinkedInProfile(ctx context.Context, input *LinkedInScanInput) (*LinkedInScanResult, error)
+	GenerateLinkedInPostTopics(ctx context.Context, input *PostTopicsInput) (*PostTopicsResult, error)
+	DraftLinkedInPost(ctx context.Context, input *PostDraftInput) (*PostDraftResult, error)
 }

@@ -28,6 +28,7 @@ func NewRouter(
 	interviewPracticeService inbound.InterviewPracticeService,
 	applyAssistService inbound.ApplyAssistService,
 	linkedInScanService inbound.LinkedInScanService,
+	linkedInPostService inbound.LinkedInPostService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -68,6 +69,7 @@ func NewRouter(
 	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService, interviewPracticeService)
 	applyAssistHandler := handler.NewApplyAssistHandler(applyAssistService)
 	linkedInScanHandler := handler.NewLinkedInScanHandler(linkedInScanService)
+	linkedInPostHandler := handler.NewLinkedInPostHandler(linkedInPostService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -154,6 +156,13 @@ func NewRouter(
 			// LinkedIn do usuário contra um checklist fixo, guarda só o scan mais recente.
 			r.Post("/linkedin-scan", linkedInScanHandler.ScanProfile)
 			r.Get("/linkedin-scan", linkedInScanHandler.GetLatestScan)
+
+			// Ideias de publicação no LinkedIn (spec 018) — temas sugeridos a partir do
+			// currículo (guarda só o mais recente) + rascunho de post sob demanda (não
+			// persiste).
+			r.Post("/linkedin-post-topics", linkedInPostHandler.GenerateTopics)
+			r.Get("/linkedin-post-topics", linkedInPostHandler.GetLatestTopics)
+			r.Post("/linkedin-post-topics/draft", linkedInPostHandler.DraftPost)
 		})
 	})
 

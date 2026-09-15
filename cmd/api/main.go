@@ -52,6 +52,7 @@ func init() {
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
+	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -88,6 +89,7 @@ func init() {
 	interviewPracticeService := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistService := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 	linkedInScanService := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)
+	linkedInPostService := appservice.NewLinkedInPostService(resumeRepo, linkedInPostRepo, aiClient)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -111,6 +113,7 @@ func init() {
 		interviewPracticeService,
 		applyAssistService,
 		linkedInScanService,
+		linkedInPostService,
 	)
 
 	// Configura Lambda adapter
@@ -149,6 +152,7 @@ func runLocalServer() {
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
+	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
 	aiClient := openai.NewAIService(cfg.OpenAIKey)
@@ -184,6 +188,7 @@ func runLocalServer() {
 	interviewPracticeSvc := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistSvc := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 	linkedInScanSvc := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)
+	linkedInPostSvc := appservice.NewLinkedInPostService(resumeRepo, linkedInPostRepo, aiClient)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -200,6 +205,7 @@ func runLocalServer() {
 		interviewPracticeSvc,
 		applyAssistSvc,
 		linkedInScanSvc,
+		linkedInPostSvc,
 	)
 
 	port := os.Getenv("PORT")

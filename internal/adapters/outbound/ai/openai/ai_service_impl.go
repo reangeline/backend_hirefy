@@ -1108,6 +1108,135 @@ LinkedIn profile text:
 	}, nil
 }
 
+const postTopicsMaxTokens = 1400
+
+// GenerateLinkedInPostTopics suggests evergreen post themes tailored to the candidate's
+// profile (spec 018). These are NOT current news/trends — the backend has no web search or
+// news integration (deliberate decision, confirmed with the user) — so the prompt is
+// explicit about generating timeless angles grounded in the candidate's own stack and
+// seniority, not claiming anything is "trending" or "recent".
+func (s *aiServiceImpl) GenerateLinkedInPostTopics(ctx context.Context, input *outbound.PostTopicsInput) (*outbound.PostTopicsResult, error) {
+	resumeJSON, _ := json.Marshal(map[string]interface{}{
+		"skills":     input.Resume.Skills,
+		"experience": input.Resume.Experience,
+		"education":  input.Resume.Education,
+		"keywords":   input.Resume.Keywords,
+	})
+
+	targetRoleLine := input.TargetRole
+	if targetRoleLine == "" {
+		targetRoleLine = "(not specified — infer from the candidate's experience)"
+	}
+
+	prompt := fmt.Sprintf(`You suggest LinkedIn post themes for a candidate to write about, based ONLY on
+their own background below. Target role: %s
+
+IMPORTANT: These are evergreen angles grounded in the candidate's real skills and
+experience — NOT breaking news or "trending topics". Never claim something is recent,
+trending, or currently happening. Each topic must connect to something specific in the
+candidate's data (a skill, a type of project, a technology, a lesson from their experience)
+— no generic career-advice filler.
+
+Generate 6-10 topics. For each:
+- "title": a short, specific post headline (under 80 chars)
+- "angle": 1-2 sentences explaining what the post would say and why it fits THIS
+  candidate's background specifically (reference a real skill/experience of theirs)
+
+Candidate data (JSON): %s
+
+Return ONLY a JSON object:
+{"topics": [{"title": "...", "angle": "..."}]}`, targetRoleLine, string(resumeJSON))
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, postTopicsMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		Topics []struct {
+			Title string `json:"title"`
+			Angle string `json:"angle"`
+		} `json:"topics"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse post topics response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse post topics response (cleaned): %w", err2)
+		}
+	}
+	if len(raw.Topics) == 0 {
+		return nil, fmt.Errorf("AI returned no post topics")
+	}
+
+	topics := make([]domain.LinkedInPostTopic, 0, len(raw.Topics))
+	for _, t := range raw.Topics {
+		topics = append(topics, domain.LinkedInPostTopic{Title: t.Title, Angle: t.Angle})
+	}
+
+	return &outbound.PostTopicsResult{Topics: topics}, nil
+}
+
+const postDraftMaxTokens = 900
+
+// DraftLinkedInPost writes a ready-to-paste LinkedIn post about a chosen topic, grounded
+// only in the candidate's real background — never inventing achievements/projects the
+// resume doesn't show (spec 018).
+func (s *aiServiceImpl) DraftLinkedInPost(ctx context.Context, input *outbound.PostDraftInput) (*outbound.PostDraftResult, error) {
+	resumeJSON, _ := json.Marshal(map[string]interface{}{
+		"skills":     input.Resume.Skills,
+		"experience": input.Resume.Experience,
+		"education":  input.Resume.Education,
+		"keywords":   input.Resume.Keywords,
+	})
+
+	prompt := fmt.Sprintf(`Write a LinkedIn post for this candidate about the topic below.
+
+Topic: %s
+Angle: %s
+
+Candidate data (JSON) — ONLY draw on real facts from here, never invent a project,
+achievement, or experience the candidate doesn't have: %s
+
+Rules:
+- First person, natural, professional but not stiff — how a real engineer/professional
+  writes on LinkedIn, not marketing copy.
+- 800-1500 characters.
+- Open with a hook (a question, a specific claim, or a short story beat) — not "I'm excited
+  to share...".
+- Ground any claim in the candidate's real skills/experience above.
+- End with a short line inviting engagement (a question, or an invitation to share
+  thoughts) — no hashtag spam, at most 3 relevant hashtags at the very end.
+
+Return ONLY a JSON object:
+{"post_text": "the full post, ready to paste"}`, input.TopicTitle, input.TopicAngle, string(resumeJSON))
+
+	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, postDraftMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		PostText string `json:"post_text"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse post draft response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse post draft response (cleaned): %w", err2)
+		}
+	}
+	if raw.PostText == "" {
+		return nil, fmt.Errorf("AI returned empty post draft")
+	}
+
+	return &outbound.PostDraftResult{PostText: raw.PostText}, nil
+}
+
 // truncate shortens a string to at most n runes.
 func truncate(s string, n int) string {
 	runes := []rune(s)
