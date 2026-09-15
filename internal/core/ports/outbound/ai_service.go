@@ -45,18 +45,18 @@ type SalaryEstimate struct {
 
 // LinkedInExperience represents one work experience item in the LinkedIn profile.
 type LinkedInExperience struct {
-	Role        string   `json:"role"`
-	Company     string   `json:"company"`
-	StartDate   string   `json:"start_date"`
-	EndDate     string   `json:"end_date,omitempty"`
-	IsCurrent   bool     `json:"is_current"`
-	Description []string `json:"description"`
+	Role        string   `json:"role" dynamodbav:"role"`
+	Company     string   `json:"company" dynamodbav:"company"`
+	StartDate   string   `json:"start_date" dynamodbav:"start_date"`
+	EndDate     string   `json:"end_date,omitempty" dynamodbav:"end_date,omitempty"`
+	IsCurrent   bool     `json:"is_current" dynamodbav:"is_current"`
+	Description []string `json:"description" dynamodbav:"description"`
 }
 
 // LinkedInLanguage represents a language entry in the LinkedIn profile.
 type LinkedInLanguage struct {
-	Name  string `json:"name"`
-	Level string `json:"level"`
+	Name  string `json:"name" dynamodbav:"name"`
+	Level string `json:"level" dynamodbav:"level"`
 }
 
 // LinkedInOptimizationResult is the structured output of a LinkedIn profile optimization.
