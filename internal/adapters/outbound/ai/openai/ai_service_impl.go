@@ -17,7 +17,7 @@ import (
 
 const (
 	openaiAPIURL              = "https://api.openai.com/v1/chat/completions"
-	defaultModel              = "gpt-4.1-mini" // Parse, salary: cheap and fast
+	fallbackDefaultModel      = "gpt-4.1-mini" // used only if NewAIService gets an empty model (local dev without the env var)
 	optimizationModel         = "gpt-4.1"      // Resume & LinkedIn optimization: higher quality
 	parseMaxTokens            = 800            // Sufficient for parse responses
 	optimizeMaxTokens         = 3500           // Full resume rewrite (all experiences/education/projects) + suggestions
@@ -29,13 +29,22 @@ const (
 
 type aiServiceImpl struct {
 	apiKey     string
+	model      string // modelo usado nas chamadas "padrão" (parse, coach, interview, apply-assist,
+	// LinkedIn scan/post) — configurável por ambiente via OPENAI_DEFAULT_MODEL (ver
+	// cmd/api/main.go e cmd/worker/main.go). optimizationModel (rewrite de currículo/LinkedIn)
+	// continua fixo — não fazia parte do pedido de troca de modelo.
 	httpClient *http.Client
 }
 
-// NewAIService cria nova instância do serviço de IA
-func NewAIService(apiKey string) outbound.AIService {
+// NewAIService cria nova instância do serviço de IA. model vazio cai no fallback
+// (gpt-4.1-mini) — só acontece em dev local sem OPENAI_DEFAULT_MODEL configurado.
+func NewAIService(apiKey string, model string) outbound.AIService {
+	if model == "" {
+		model = fallbackDefaultModel
+	}
 	return &aiServiceImpl{
 		apiKey: apiKey,
+		model:  model,
 		httpClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
 		},
@@ -55,7 +64,7 @@ func (s *aiServiceImpl) ParseResume(ctx context.Context, content string) (*outbo
 						Resume:
 						%s`, content)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, parseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, parseMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +89,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
 Job Description:
 %s`, content)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, parseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, parseMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +441,7 @@ If no reliable data is found return:
 {"found": false, "currency": "", "min_salary": 0, "max_salary": 0, "midpoint": 0, "period": "", "location": "", "seniority": "", "notes": "", "disclaimer": ""}
 `, targetRole, companyCtx)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.1, salaryMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.1, salaryMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +549,7 @@ Resume text:
 %s`, text)
 
 	const pdfParseMaxTokens = 1800
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.1, pdfParseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.1, pdfParseMaxTokens)
 	if err != nil {
 		return nil, fmt.Errorf("AI resume parse failed: %w", err)
 	}
@@ -676,7 +685,7 @@ Return ONLY a JSON object:
 		return nil, fmt.Errorf("unsupported coach stage: %s", input.Stage)
 	}
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.7, coachMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.7, coachMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +771,7 @@ Return ONLY a JSON object:
 		string(previousJSON), string(gapsJSON),
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, interviewMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, interviewMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -828,7 +837,7 @@ Be honest — a rambling answer without a clear outcome should score low on cont
 		behavioralNote, starInstruction,
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.5, interviewMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.5, interviewMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -899,7 +908,7 @@ Return ONLY a JSON object:
 		truncate(input.JobDescription, 600), string(resumeJSON),
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, applyAssistMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, applyAssistMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -955,7 +964,7 @@ Return ONLY a JSON object:
 		truncate(input.JobDescription, 600), string(resumeJSON), input.Gap,
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.5, applyAssistMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.5, applyAssistMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -1050,7 +1059,7 @@ Return ONLY a JSON object with this EXACT structure:
 LinkedIn profile text:
 %s`, targetRoleLine, input.ProfileText)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, linkedInScanMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, linkedInScanMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -1147,7 +1156,7 @@ Candidate data (JSON): %s
 Return ONLY a JSON object:
 {"topics": [{"title": "...", "angle": "..."}]}`, targetRoleLine, string(resumeJSON))
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, postTopicsMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, postTopicsMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -1213,7 +1222,7 @@ Rules:
 Return ONLY a JSON object:
 {"post_text": "the full post, ready to paste"}`, input.TopicTitle, input.TopicAngle, string(resumeJSON))
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, postDraftMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, postDraftMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -1247,7 +1256,7 @@ func truncate(s string, n int) string {
 }
 
 // callOpenAI faz chamada para a API do OpenAI.
-// model: modelo a usar (defaultModel ou optimizationModel).
+// model: modelo a usar (s.model ou optimizationModel).
 // attemptTimeout define o deadline por tentativa; passe 0 para usar o padrão (perAttemptTimeout).
 func (s *aiServiceImpl) callOpenAI(ctx context.Context, model string, prompt string, temperature float64, maxTokens int, attemptTimeout ...time.Duration) (string, error) {
 	perAttempt := perAttemptTimeout

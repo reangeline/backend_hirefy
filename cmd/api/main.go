@@ -68,7 +68,7 @@ func init() {
 
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
-	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
 
 	// Inicializa services (application layer)
 	userService := appservice.NewUserService(userRepo, resumeRepo, objectStorage, cognitoClient, subscriptionRepo, verificationRepo)
@@ -155,7 +155,7 @@ func runLocalServer() {
 	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
-	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -235,6 +235,7 @@ func loadConfig() *appconfig.Config {
 		StripePricePremiumMonthly: os.Getenv("STRIPE_PRICE_PREMIUM_MONTHLY"),
 		WebAppBaseURL:             webAppBaseURL,
 		OpenAIKey:                 os.Getenv("OPENAI_API_KEY"),
+		OpenAIDefaultModel:        os.Getenv("OPENAI_DEFAULT_MODEL"),
 		OptimizationQueueURL:      os.Getenv("OPTIMIZATION_QUEUE_URL"),
 		FirebaseCredentials:       os.Getenv("FIREBASE_CREDENTIALS_FILE"),
 		FirebaseProjectID:         os.Getenv("FIREBASE_PROJECT_ID"),

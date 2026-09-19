@@ -86,7 +86,7 @@ func main() {
 		log.Printf("[worker] FCM notifier not initialized (check credentials file path/bundle)")
 	}
 
-	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
 
 	resumeService := service.NewResumeOptimizerService(
 		resumeRepo,
@@ -111,6 +111,7 @@ func loadConfig() *appconfig.Config {
 		StripeSecretKey:      os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret:  os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),
+		OpenAIDefaultModel:   os.Getenv("OPENAI_DEFAULT_MODEL"),
 		OptimizationQueueURL: os.Getenv("OPTIMIZATION_QUEUE_URL"),
 		FirebaseCredentials:  os.Getenv("FIREBASE_CREDENTIALS_FILE"),
 		FirebaseProjectID:    os.Getenv("FIREBASE_PROJECT_ID"),
