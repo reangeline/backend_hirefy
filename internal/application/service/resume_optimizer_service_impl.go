@@ -291,6 +291,19 @@ func (s *resumeOptimizerServiceImpl) runOptimization(
 		return nil, err
 	}
 
+	// Deduz 1 crédito do plano Free por otimização bem-sucedida — mesmo pool compartilhado
+	// já usado por pipeline_coach/interview_practice (spec 020). Planos pagos não são afetados.
+	if subscription.Plan == domain.PlanFree {
+		if err := subscription.UseCredit(); err != nil {
+			return nil, err
+		}
+		tx := domain.NewCreditTransaction(req.UserID, 1, domain.CreditTransactionTypeUse, "Resume optimization")
+		_ = s.creditTransactionRepo.Create(ctx, tx)
+		if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
+			return nil, err
+		}
+	}
+
 	return optimized, nil
 }
 
@@ -543,6 +556,21 @@ func (s *resumeOptimizerServiceImpl) ProcessLinkedInOptimizationJob(
 	if err := s.resumeRepo.CreateOptimizedResume(ctx, optimized); err != nil {
 		_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
 		return nil, err
+	}
+
+	// Deduz 1 crédito do plano Free por otimização bem-sucedida — mesmo pool compartilhado
+	// já usado por pipeline_coach/interview_practice (spec 020). Planos pagos não são afetados.
+	if subscription.Plan == domain.PlanFree {
+		if err := subscription.UseCredit(); err != nil {
+			_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
+			return nil, err
+		}
+		tx := domain.NewCreditTransaction(req.UserID, 1, domain.CreditTransactionTypeUse, "LinkedIn optimization")
+		_ = s.creditTransactionRepo.Create(ctx, tx)
+		if err := s.subscriptionRepo.Update(ctx, subscription); err != nil {
+			_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusFailed, err.Error(), "")
+			return nil, err
+		}
 	}
 
 	_ = s.jobRepo.UpdateStatus(ctx, req.UserID, req.JobID, domain.JobStatusCompleted, "", optimized.ID)
