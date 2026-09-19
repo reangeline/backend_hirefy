@@ -1,6 +1,10 @@
 package outbound
 
-import "context"
+import (
+	"context"
+
+	"github.com/reangeline/backend_applywise/internal/core/domain"
+)
 
 type ResumeAnalysis struct {
 	Skills         []string               `json:"skills"`
@@ -41,18 +45,18 @@ type SalaryEstimate struct {
 
 // LinkedInExperience represents one work experience item in the LinkedIn profile.
 type LinkedInExperience struct {
-	Role        string   `json:"role"`
-	Company     string   `json:"company"`
-	StartDate   string   `json:"start_date"`
-	EndDate     string   `json:"end_date,omitempty"`
-	IsCurrent   bool     `json:"is_current"`
-	Description []string `json:"description"`
+	Role        string   `json:"role" dynamodbav:"role"`
+	Company     string   `json:"company" dynamodbav:"company"`
+	StartDate   string   `json:"start_date" dynamodbav:"start_date"`
+	EndDate     string   `json:"end_date,omitempty" dynamodbav:"end_date,omitempty"`
+	IsCurrent   bool     `json:"is_current" dynamodbav:"is_current"`
+	Description []string `json:"description" dynamodbav:"description"`
 }
 
 // LinkedInLanguage represents a language entry in the LinkedIn profile.
 type LinkedInLanguage struct {
-	Name  string `json:"name"`
-	Level string `json:"level"`
+	Name  string `json:"name" dynamodbav:"name"`
+	Level string `json:"level" dynamodbav:"level"`
 }
 
 // LinkedInOptimizationResult is the structured output of a LinkedIn profile optimization.
@@ -166,6 +170,60 @@ type ApplyAssistAnswerResult struct {
 	SuggestedAnswer string
 }
 
+// ResumeAdditionInput holds the context needed to suggest a sentence incorporating a
+// missing skill/requirement into the candidate's resume (spec 014).
+type ResumeAdditionInput struct {
+	Gap            string // a palavra-chave ou requisito faltando que a vaga pede
+	JobTitle       string
+	CompanyName    string
+	JobDescription string
+	ResumeData     map[string]interface{}
+}
+
+// ResumeAdditionResult holds the AI-suggested sentence.
+type ResumeAdditionResult struct {
+	SuggestedText string
+}
+
+// LinkedInScanInput holds the extracted text of a user's LinkedIn profile PDF export, to be
+// audited against a fixed checklist (spec 015).
+type LinkedInScanInput struct {
+	ProfileText string
+	TargetRole  string // opcional — se vazio, a IA infere da headline/experiência
+}
+
+// LinkedInScanResult is the structured audit report — mirrors domain.LinkedInScan minus the
+// persistence fields (ID/UserID/timestamps), which the service layer fills in.
+type LinkedInScanResult struct {
+	Score           float64
+	Sections        []domain.LinkedInScanSection
+	PredictedSkills []string
+	Tips            []string
+}
+
+// PostTopicsInput holds the candidate data used to suggest LinkedIn post topics (spec 018).
+type PostTopicsInput struct {
+	Resume     *ResumeAnalysis
+	TargetRole string // opcional — se vazio, a IA infere do currículo
+}
+
+// PostTopicsResult is the structured list of suggested topics.
+type PostTopicsResult struct {
+	Topics []domain.LinkedInPostTopic
+}
+
+// PostDraftInput holds the candidate data and the chosen topic to draft a post about.
+type PostDraftInput struct {
+	Resume     *ResumeAnalysis
+	TopicTitle string
+	TopicAngle string
+}
+
+// PostDraftResult is the AI-drafted, ready-to-paste LinkedIn post.
+type PostDraftResult struct {
+	PostText string
+}
+
 // AIService define integração com serviço de IA
 type AIService interface {
 	ParseResume(ctx context.Context, content string) (*ResumeAnalysis, error)
@@ -178,4 +236,8 @@ type AIService interface {
 	GenerateInterviewQuestion(ctx context.Context, input *InterviewQuestionInput) (*InterviewQuestionResult, error)
 	EvaluateInterviewAnswer(ctx context.Context, input *InterviewAnswerInput) (*InterviewAnswerResult, error)
 	SuggestApplyAnswer(ctx context.Context, input *ApplyAssistAnswerInput) (*ApplyAssistAnswerResult, error)
+	SuggestResumeAddition(ctx context.Context, input *ResumeAdditionInput) (*ResumeAdditionResult, error)
+	ScanLinkedInProfile(ctx context.Context, input *LinkedInScanInput) (*LinkedInScanResult, error)
+	GenerateLinkedInPostTopics(ctx context.Context, input *PostTopicsInput) (*PostTopicsResult, error)
+	DraftLinkedInPost(ctx context.Context, input *PostDraftInput) (*PostDraftResult, error)
 }

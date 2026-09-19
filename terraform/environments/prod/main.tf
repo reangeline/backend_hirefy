@@ -58,6 +58,7 @@ module "lambda" {
     STRIPE_WEBHOOK_SECRET        = var.stripe_webhook_secret
     STRIPE_PRICE_PREMIUM_MONTHLY = var.stripe_price_premium_monthly
     OPENAI_API_KEY               = var.openai_api_key
+    OPENAI_DEFAULT_MODEL         = "gpt-5.6-terra"
     SES_FROM_EMAIL               = var.ses_from_email
     ENVIRONMENT                  = var.environment
     REVENUECAT_WEBHOOK_SECRET    = var.revenuecat_webhook_secret
@@ -89,6 +90,7 @@ module "lambda_worker" {
   environment_variables = {
     DYNAMODB_TABLE            = module.dynamodb.table_name
     OPENAI_API_KEY            = var.openai_api_key
+    OPENAI_DEFAULT_MODEL      = "gpt-5.6-terra"
     ENVIRONMENT               = var.environment
     OPTIMIZATION_QUEUE_URL    = module.optimization_queue.queue_url
     FIREBASE_CREDENTIALS_FILE = var.firebase_credentials_file

@@ -10,6 +10,7 @@ type Config struct {
 	StripePricePremiumMonthly string
 	WebAppBaseURL             string
 	OpenAIKey                 string
+	OpenAIDefaultModel        string
 	OptimizationQueueURL      string
 	FirebaseCredentials       string
 	FirebaseProjectID         string

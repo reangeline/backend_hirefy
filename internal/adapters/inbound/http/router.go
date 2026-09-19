@@ -27,6 +27,8 @@ func NewRouter(
 	pipelineCoachService inbound.PipelineCoachService,
 	interviewPracticeService inbound.InterviewPracticeService,
 	applyAssistService inbound.ApplyAssistService,
+	linkedInScanService inbound.LinkedInScanService,
+	linkedInPostService inbound.LinkedInPostService,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -66,6 +68,8 @@ func NewRouter(
 	userHandler := handler.NewUserHandler(userService)
 	pipelineHandler := handler.NewPipelineHandler(pipelineRepo, contactRepo, userRepo, notifier, pipelineCoachService, interviewPracticeService)
 	applyAssistHandler := handler.NewApplyAssistHandler(applyAssistService)
+	linkedInScanHandler := handler.NewLinkedInScanHandler(linkedInScanService)
+	linkedInPostHandler := handler.NewLinkedInPostHandler(linkedInPostService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -105,6 +109,7 @@ func NewRouter(
 			r.Get("/resumes/optimized/{optimizedID}", resumeHandler.GetOptimizedResume)
 			r.Put("/resumes/optimized/{optimizedID}", resumeHandler.UpdateOptimizedResume)
 			r.Delete("/resumes/{resumeID}", resumeHandler.DeleteResume)
+			r.Post("/resumes/{resumeID}/suggest-addition", resumeHandler.SuggestAddition)
 
 			r.Get("/resumes/optimize/jobs/{jobID}", resumeHandler.GetOptimizationJobStatus)
 
@@ -146,6 +151,18 @@ func NewRouter(
 			// (extensão de navegador). Não fica sob /pipeline/{jobId} porque acontece antes de
 			// a vaga existir no board (só é registrada depois que o usuário confirma o envio).
 			r.Post("/apply-assist/answer", applyAssistHandler.SuggestAnswer)
+
+			// LinkedIn Scan Report (spec 015) — audita o PDF exportado do perfil do
+			// LinkedIn do usuário contra um checklist fixo, guarda só o scan mais recente.
+			r.Post("/linkedin-scan", linkedInScanHandler.ScanProfile)
+			r.Get("/linkedin-scan", linkedInScanHandler.GetLatestScan)
+
+			// Ideias de publicação no LinkedIn (spec 018) — temas sugeridos a partir do
+			// currículo (guarda só o mais recente) + rascunho de post sob demanda (não
+			// persiste).
+			r.Post("/linkedin-post-topics", linkedInPostHandler.GenerateTopics)
+			r.Get("/linkedin-post-topics", linkedInPostHandler.GetLatestTopics)
+			r.Post("/linkedin-post-topics/draft", linkedInPostHandler.DraftPost)
 		})
 	})
 

@@ -11,12 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/outbound"
 )
 
 const (
 	openaiAPIURL              = "https://api.openai.com/v1/chat/completions"
-	defaultModel              = "gpt-4.1-mini" // Parse, salary: cheap and fast
+	fallbackDefaultModel      = "gpt-4.1-mini" // used only if NewAIService gets an empty model (local dev without the env var)
 	optimizationModel         = "gpt-4.1"      // Resume & LinkedIn optimization: higher quality
 	parseMaxTokens            = 800            // Sufficient for parse responses
 	optimizeMaxTokens         = 3500           // Full resume rewrite (all experiences/education/projects) + suggestions
@@ -28,13 +29,22 @@ const (
 
 type aiServiceImpl struct {
 	apiKey     string
+	model      string // modelo usado nas chamadas "padrão" (parse, coach, interview, apply-assist,
+	// LinkedIn scan/post) — configurável por ambiente via OPENAI_DEFAULT_MODEL (ver
+	// cmd/api/main.go e cmd/worker/main.go). optimizationModel (rewrite de currículo/LinkedIn)
+	// continua fixo — não fazia parte do pedido de troca de modelo.
 	httpClient *http.Client
 }
 
-// NewAIService cria nova instância do serviço de IA
-func NewAIService(apiKey string) outbound.AIService {
+// NewAIService cria nova instância do serviço de IA. model vazio cai no fallback
+// (gpt-4.1-mini) — só acontece em dev local sem OPENAI_DEFAULT_MODEL configurado.
+func NewAIService(apiKey string, model string) outbound.AIService {
+	if model == "" {
+		model = fallbackDefaultModel
+	}
 	return &aiServiceImpl{
 		apiKey: apiKey,
+		model:  model,
 		httpClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
 		},
@@ -54,7 +64,7 @@ func (s *aiServiceImpl) ParseResume(ctx context.Context, content string) (*outbo
 						Resume:
 						%s`, content)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, parseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, parseMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +89,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
 Job Description:
 %s`, content)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, parseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, parseMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +441,7 @@ If no reliable data is found return:
 {"found": false, "currency": "", "min_salary": 0, "max_salary": 0, "midpoint": 0, "period": "", "location": "", "seniority": "", "notes": "", "disclaimer": ""}
 `, targetRole, companyCtx)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.1, salaryMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.1, salaryMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +549,7 @@ Resume text:
 %s`, text)
 
 	const pdfParseMaxTokens = 1800
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.1, pdfParseMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.1, pdfParseMaxTokens)
 	if err != nil {
 		return nil, fmt.Errorf("AI resume parse failed: %w", err)
 	}
@@ -675,7 +685,7 @@ Return ONLY a JSON object:
 		return nil, fmt.Errorf("unsupported coach stage: %s", input.Stage)
 	}
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.7, coachMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.7, coachMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -761,7 +771,7 @@ Return ONLY a JSON object:
 		string(previousJSON), string(gapsJSON),
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.8, interviewMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, interviewMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -827,7 +837,7 @@ Be honest — a rambling answer without a clear outcome should score low on cont
 		behavioralNote, starInstruction,
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.5, interviewMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.5, interviewMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -898,7 +908,7 @@ Return ONLY a JSON object:
 		truncate(input.JobDescription, 600), string(resumeJSON),
 	)
 
-	response, err := s.callOpenAI(ctx, defaultModel, prompt, 0.3, applyAssistMaxTokens)
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, applyAssistMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -922,6 +932,320 @@ Return ONLY a JSON object:
 	return &outbound.ApplyAssistAnswerResult{SuggestedAnswer: raw.SuggestedAnswer}, nil
 }
 
+// SuggestResumeAddition sugere uma frase pra incorporar uma skill/requisito que a vaga pede
+// e o currículo não mostra (spec 014).
+//
+// Decisão deliberada, diferente de SuggestApplyAnswer (que instrui a IA a nunca inventar
+// experiência): aqui a IA escreve a frase JÁ alegando a experiência, mesmo que o currículo
+// base não mostre isso — decisão explícita do usuário, depois de avisado do risco, porque o
+// ponto da feature é dar um rascunho pronto pra revisar/editar, não uma resposta factual
+// verificada. Não é inconsistência com o padrão de SuggestApplyAnswer, é escopo diferente:
+// lá é uma resposta pra vaga de verdade, aqui é um rascunho editável pelo próprio usuário
+// antes de qualquer coisa ser salva no currículo.
+func (s *aiServiceImpl) SuggestResumeAddition(ctx context.Context, input *outbound.ResumeAdditionInput) (*outbound.ResumeAdditionResult, error) {
+	resumeJSON, _ := json.Marshal(input.ResumeData)
+
+	prompt := fmt.Sprintf(`You are helping a candidate draft an addition to their resume's professional summary.
+
+The target job asks for: %s
+Target role: %s
+Company: %s
+Job description excerpt: %s
+Candidate's current resume data (JSON): %s
+
+Write ONE natural, first-person sentence claiming relevant experience with "%s", phrased so
+it could plausibly be added to the candidate's professional summary. This is a DRAFT the
+candidate will review and edit themselves before adding it — write it as a ready-to-use
+claim, not a hedge. Keep it concise (1 sentence).
+
+Return ONLY a JSON object:
+{"suggested_text": "the sentence, first person, ready to use"}`,
+		input.Gap, input.JobTitle, input.CompanyName,
+		truncate(input.JobDescription, 600), string(resumeJSON), input.Gap,
+	)
+
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.5, applyAssistMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		SuggestedText string `json:"suggested_text"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse resume addition response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse resume addition response (cleaned): %w", err2)
+		}
+	}
+	if raw.SuggestedText == "" {
+		return nil, fmt.Errorf("AI returned empty resume addition suggestion")
+	}
+
+	return &outbound.ResumeAdditionResult{SuggestedText: raw.SuggestedText}, nil
+}
+
+const linkedInScanMaxTokens = 2200
+
+// ScanLinkedInProfile audits the text extracted from a user's LinkedIn profile PDF export
+// against a fixed checklist (spec 015) — inspired by Jobscan's "LinkedIn Scan Report", but
+// scoped to what's honestly derivable from plain text (extractTextFromPDF doesn't process
+// images, so there's no photo/cover-picture check here — that would be fabricated).
+//
+// The checklist items are enumerated explicitly in the prompt (not left for the AI to
+// invent) so the report shape stays stable across scans.
+func (s *aiServiceImpl) ScanLinkedInProfile(ctx context.Context, input *outbound.LinkedInScanInput) (*outbound.LinkedInScanResult, error) {
+	targetRoleLine := input.TargetRole
+	if targetRoleLine == "" {
+		targetRoleLine = "(not specified — infer the candidate's target role from the headline and most recent experience)"
+	}
+
+	prompt := fmt.Sprintf(`You are auditing a candidate's LinkedIn profile (exported as PDF, text below) against a
+fixed checklist, similar to a LinkedIn profile scanner report. For EACH check listed below,
+decide if it passes based ONLY on what's explicitly present in the profile text — do not
+assume something exists if it's not in the text. Write a short (1 sentence) explanation for
+each check, in Portuguese (pt-BR), justifying the pass/fail based on what you found (or
+didn't find).
+
+Target role: %s
+
+Checklist (return exactly these sections/checks, in this order, do not add or remove any):
+
+Informações básicas:
+- Nome completo presente
+- Localização (cidade/região) presente
+- Headline presente
+
+Alto impacto:
+- Headline tem tamanho adequado e não é genérica (ex.: mais do que só "Cargo at Empresa")
+- Seção "Sobre" está presente
+- Seção "Sobre" tem tamanho substantivo (pelo menos 3-4 frases com conteúdo real)
+
+Experiência profissional:
+- Todos os cargos listados têm descrição (não só título/empresa/datas)
+- Descrições usam resultados quantificados ou verbos de ação, não só lista de tarefas
+- Datas de todos os cargos estão presentes
+
+Skills:
+- Lista de skills está presente
+- Quantidade de skills é razoável (pelo menos 5)
+
+Formação:
+- Formação acadêmica está presente
+
+Also generate:
+- "predicted_skills": 3-6 skills that make sense for this candidate's target role/seniority
+  and are NOT already listed in their profile — label these clearly as suggestions, don't
+  claim they're already on the profile.
+- "tips": 2-4 short, specific, actionable recommendations in Portuguese (pt-BR), based on
+  what's actually missing/weak in THIS profile — no generic advice.
+
+Return ONLY a JSON object with this EXACT structure:
+{
+  "sections": [
+    {"name": "Informações básicas", "checks": [{"label": "Nome completo presente", "passed": true, "explanation": "..."}, ...]},
+    {"name": "Alto impacto", "checks": [...]},
+    {"name": "Experiência profissional", "checks": [...]},
+    {"name": "Skills", "checks": [...]},
+    {"name": "Formação", "checks": [...]}
+  ],
+  "predicted_skills": ["skill1", "skill2"],
+  "tips": ["tip1", "tip2"]
+}
+
+LinkedIn profile text:
+%s`, targetRoleLine, input.ProfileText)
+
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.3, linkedInScanMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		Sections []struct {
+			Name   string `json:"name"`
+			Checks []struct {
+				Label       string `json:"label"`
+				Passed      bool   `json:"passed"`
+				Explanation string `json:"explanation"`
+			} `json:"checks"`
+		} `json:"sections"`
+		PredictedSkills []string `json:"predicted_skills"`
+		Tips            []string `json:"tips"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse LinkedIn scan response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse LinkedIn scan response (cleaned): %w", err2)
+		}
+	}
+
+	sections := make([]domain.LinkedInScanSection, 0, len(raw.Sections))
+	total, passedCount := 0, 0
+	for _, s := range raw.Sections {
+		checks := make([]domain.LinkedInScanCheck, 0, len(s.Checks))
+		for _, c := range s.Checks {
+			checks = append(checks, domain.LinkedInScanCheck{
+				Label:       c.Label,
+				Passed:      c.Passed,
+				Explanation: c.Explanation,
+			})
+			total++
+			if c.Passed {
+				passedCount++
+			}
+		}
+		sections = append(sections, domain.LinkedInScanSection{Name: s.Name, Checks: checks})
+	}
+	if total == 0 {
+		return nil, fmt.Errorf("AI returned no checklist items for LinkedIn scan")
+	}
+
+	score := float64(passedCount) / float64(total) * 100
+
+	return &outbound.LinkedInScanResult{
+		Score:           score,
+		Sections:        sections,
+		PredictedSkills: raw.PredictedSkills,
+		Tips:            raw.Tips,
+	}, nil
+}
+
+const postTopicsMaxTokens = 1400
+
+// GenerateLinkedInPostTopics suggests evergreen post themes tailored to the candidate's
+// profile (spec 018). These are NOT current news/trends — the backend has no web search or
+// news integration (deliberate decision, confirmed with the user) — so the prompt is
+// explicit about generating timeless angles grounded in the candidate's own stack and
+// seniority, not claiming anything is "trending" or "recent".
+func (s *aiServiceImpl) GenerateLinkedInPostTopics(ctx context.Context, input *outbound.PostTopicsInput) (*outbound.PostTopicsResult, error) {
+	resumeJSON, _ := json.Marshal(map[string]interface{}{
+		"skills":     input.Resume.Skills,
+		"experience": input.Resume.Experience,
+		"education":  input.Resume.Education,
+		"keywords":   input.Resume.Keywords,
+	})
+
+	targetRoleLine := input.TargetRole
+	if targetRoleLine == "" {
+		targetRoleLine = "(not specified — infer from the candidate's experience)"
+	}
+
+	prompt := fmt.Sprintf(`You suggest LinkedIn post themes for a candidate to write about, based ONLY on
+their own background below. Target role: %s
+
+IMPORTANT: These are evergreen angles grounded in the candidate's real skills and
+experience — NOT breaking news or "trending topics". Never claim something is recent,
+trending, or currently happening. Each topic must connect to something specific in the
+candidate's data (a skill, a type of project, a technology, a lesson from their experience)
+— no generic career-advice filler.
+
+Generate 6-10 topics. For each:
+- "title": a short, specific post headline (under 80 chars)
+- "angle": 1-2 sentences explaining what the post would say and why it fits THIS
+  candidate's background specifically (reference a real skill/experience of theirs)
+
+Candidate data (JSON): %s
+
+Return ONLY a JSON object:
+{"topics": [{"title": "...", "angle": "..."}]}`, targetRoleLine, string(resumeJSON))
+
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, postTopicsMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		Topics []struct {
+			Title string `json:"title"`
+			Angle string `json:"angle"`
+		} `json:"topics"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse post topics response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse post topics response (cleaned): %w", err2)
+		}
+	}
+	if len(raw.Topics) == 0 {
+		return nil, fmt.Errorf("AI returned no post topics")
+	}
+
+	topics := make([]domain.LinkedInPostTopic, 0, len(raw.Topics))
+	for _, t := range raw.Topics {
+		topics = append(topics, domain.LinkedInPostTopic{Title: t.Title, Angle: t.Angle})
+	}
+
+	return &outbound.PostTopicsResult{Topics: topics}, nil
+}
+
+const postDraftMaxTokens = 900
+
+// DraftLinkedInPost writes a ready-to-paste LinkedIn post about a chosen topic, grounded
+// only in the candidate's real background — never inventing achievements/projects the
+// resume doesn't show (spec 018).
+func (s *aiServiceImpl) DraftLinkedInPost(ctx context.Context, input *outbound.PostDraftInput) (*outbound.PostDraftResult, error) {
+	resumeJSON, _ := json.Marshal(map[string]interface{}{
+		"skills":     input.Resume.Skills,
+		"experience": input.Resume.Experience,
+		"education":  input.Resume.Education,
+		"keywords":   input.Resume.Keywords,
+	})
+
+	prompt := fmt.Sprintf(`Write a LinkedIn post for this candidate about the topic below.
+
+Topic: %s
+Angle: %s
+
+Candidate data (JSON) — ONLY draw on real facts from here, never invent a project,
+achievement, or experience the candidate doesn't have: %s
+
+Rules:
+- First person, natural, professional but not stiff — how a real engineer/professional
+  writes on LinkedIn, not marketing copy.
+- 800-1500 characters.
+- Open with a hook (a question, a specific claim, or a short story beat) — not "I'm excited
+  to share...".
+- Ground any claim in the candidate's real skills/experience above.
+- End with a short line inviting engagement (a question, or an invitation to share
+  thoughts) — no hashtag spam, at most 3 relevant hashtags at the very end.
+
+Return ONLY a JSON object:
+{"post_text": "the full post, ready to paste"}`, input.TopicTitle, input.TopicAngle, string(resumeJSON))
+
+	response, err := s.callOpenAI(ctx, s.model, prompt, 0.8, postDraftMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw struct {
+		PostText string `json:"post_text"`
+	}
+	if err := json.Unmarshal([]byte(response), &raw); err != nil {
+		clean := sanitizeJSON(response)
+		if clean == "" {
+			return nil, fmt.Errorf("failed to parse post draft response: %w", err)
+		}
+		if err2 := json.Unmarshal([]byte(clean), &raw); err2 != nil {
+			return nil, fmt.Errorf("failed to parse post draft response (cleaned): %w", err2)
+		}
+	}
+	if raw.PostText == "" {
+		return nil, fmt.Errorf("AI returned empty post draft")
+	}
+
+	return &outbound.PostDraftResult{PostText: raw.PostText}, nil
+}
+
 // truncate shortens a string to at most n runes.
 func truncate(s string, n int) string {
 	runes := []rune(s)
@@ -932,7 +1256,7 @@ func truncate(s string, n int) string {
 }
 
 // callOpenAI faz chamada para a API do OpenAI.
-// model: modelo a usar (defaultModel ou optimizationModel).
+// model: modelo a usar (s.model ou optimizationModel).
 // attemptTimeout define o deadline por tentativa; passe 0 para usar o padrão (perAttemptTimeout).
 func (s *aiServiceImpl) callOpenAI(ctx context.Context, model string, prompt string, temperature float64, maxTokens int, attemptTimeout ...time.Duration) (string, error) {
 	perAttempt := perAttemptTimeout

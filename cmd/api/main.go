@@ -51,6 +51,8 @@ func init() {
 	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
+	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
+	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -66,7 +68,7 @@ func init() {
 
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
-	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
 
 	// Inicializa services (application layer)
 	userService := appservice.NewUserService(userRepo, resumeRepo, objectStorage, cognitoClient, subscriptionRepo, verificationRepo)
@@ -86,6 +88,8 @@ func init() {
 	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	interviewPracticeService := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistService := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
+	linkedInScanService := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)
+	linkedInPostService := appservice.NewLinkedInPostService(resumeRepo, linkedInPostRepo, aiClient)
 
 	revenueCatService := appservice.NewRevenueCatService(
 		subscriptionRepo,
@@ -108,6 +112,8 @@ func init() {
 		pipelineCoachService,
 		interviewPracticeService,
 		applyAssistService,
+		linkedInScanService,
+		linkedInPostService,
 	)
 
 	// Configura Lambda adapter
@@ -145,9 +151,11 @@ func runLocalServer() {
 	pipelineRepo := dynamodb.NewPipelineRepository(dynamoClient)
 	contactRepo := dynamodb.NewContactRepository(dynamoClient)
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
+	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
+	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
-	aiClient := openai.NewAIService(cfg.OpenAIKey)
+	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -179,6 +187,8 @@ func runLocalServer() {
 	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	interviewPracticeSvc := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistSvc := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
+	linkedInScanSvc := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)
+	linkedInPostSvc := appservice.NewLinkedInPostService(resumeRepo, linkedInPostRepo, aiClient)
 
 	router := httpAdapter.NewRouter(
 		authService,
@@ -194,6 +204,8 @@ func runLocalServer() {
 		pipelineCoachSvc,
 		interviewPracticeSvc,
 		applyAssistSvc,
+		linkedInScanSvc,
+		linkedInPostSvc,
 	)
 
 	port := os.Getenv("PORT")
@@ -223,6 +235,7 @@ func loadConfig() *appconfig.Config {
 		StripePricePremiumMonthly: os.Getenv("STRIPE_PRICE_PREMIUM_MONTHLY"),
 		WebAppBaseURL:             webAppBaseURL,
 		OpenAIKey:                 os.Getenv("OPENAI_API_KEY"),
+		OpenAIDefaultModel:        os.Getenv("OPENAI_DEFAULT_MODEL"),
 		OptimizationQueueURL:      os.Getenv("OPTIMIZATION_QUEUE_URL"),
 		FirebaseCredentials:       os.Getenv("FIREBASE_CREDENTIALS_FILE"),
 		FirebaseProjectID:         os.Getenv("FIREBASE_PROJECT_ID"),
