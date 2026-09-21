@@ -137,6 +137,7 @@ func NewRouter(
 			r.Post("/pipeline/{jobId}/interview", pipelineHandler.LogInterview)
 			r.Post("/pipeline/{jobId}/followup", pipelineHandler.LogFollowUp)
 			r.Post("/pipeline/{jobId}/coach", pipelineHandler.Coach)
+			r.Get("/pipeline/{jobId}/coach", pipelineHandler.GetCoach)
 			r.Get("/pipeline/analytics", pipelineHandler.GetPipelineAnalytics)
 			r.Get("/pipeline/{jobId}/contacts", pipelineHandler.ListContacts)
 			r.Post("/pipeline/{jobId}/contacts", pipelineHandler.AddContact)

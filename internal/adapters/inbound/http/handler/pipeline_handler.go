@@ -522,6 +522,7 @@ type coachRequest struct {
 	MissingKeywords  []string `json:"missing_keywords"`
 	DaysSinceApplied int      `json:"days_since_applied"`
 	Tone             string   `json:"tone"`
+	Force            bool     `json:"force,omitempty"`
 }
 
 func (h *PipelineHandler) Coach(w http.ResponseWriter, r *http.Request) {
@@ -561,6 +562,7 @@ func (h *PipelineHandler) Coach(w http.ResponseWriter, r *http.Request) {
 		MissingKeywords:  req.MissingKeywords,
 		DaysSinceApplied: req.DaysSinceApplied,
 		Tone:             req.Tone,
+		ForceRegenerate:  req.Force,
 	})
 	if err != nil {
 		log.Printf("[coach] jobID=%s stage=%s userID=%s error=%T: %v", jobID, req.Stage, userID, err, err)
@@ -578,6 +580,34 @@ func (h *PipelineHandler) Coach(w http.ResponseWriter, r *http.Request) {
 		default:
 			respondError(w, http.StatusInternalServerError, err.Error())
 		}
+		return
+	}
+
+	respondJSON(w, http.StatusOK, resp)
+}
+
+// GetCoach só lê uma sugestão já gerada — nunca chama IA nem cobra crédito. 404 se ainda não
+// foi gerada nenhuma pra esse (job, stage).
+func (h *PipelineHandler) GetCoach(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(middleware.UserIDContextKey).(string)
+	if !ok || userID == "" {
+		respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	jobID := chi.URLParam(r, "jobId")
+	stage := r.URL.Query().Get("stage")
+	if stage == "" {
+		respondError(w, http.StatusBadRequest, "stage query param is required")
+		return
+	}
+
+	resp, err := h.coachService.GetCachedCoach(r.Context(), userID, jobID, stage)
+	if err != nil {
+		if err == domain.ErrCoachSuggestionNotFound {
+			respondError(w, http.StatusNotFound, "no coach suggestion generated yet")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

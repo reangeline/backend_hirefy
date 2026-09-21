@@ -28,6 +28,7 @@ var (
 	// Pipeline errors
 	ErrPipelineJobNotFound       = errors.New("pipeline job not found")
 	ErrInterviewQuestionNotFound = errors.New("interview question not found")
+	ErrCoachSuggestionNotFound   = errors.New("coach suggestion not found")
 	ErrPaymentFailed             = errors.New("payment failed")
 	ErrInvalidPaymentMethod      = errors.New("invalid payment method")
 

@@ -53,6 +53,7 @@ func init() {
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
 	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
+	coachSuggestionRepo := dynamodb.NewCoachSuggestionRepository(dynamoClient)
 	queuePublisher := queue.NewSQSPublisher(awsCfg, cfg.OptimizationQueueURL)
 	fcmNotifier, err := fcmpublisher.NewPublisher(context.Background(), cfg.FirebaseCredentials, cfg.FirebaseProjectID, userRepo)
 	if err != nil {
@@ -85,7 +86,7 @@ func init() {
 	subscriptionService := appservice.NewSubscriptionService(subscriptionRepo, stripeClient, userRepo, creditTransactionRepo, cfg.StripePricePremiumMonthly)
 	paymentService := appservice.NewPaymentService(stripeClient, subscriptionRepo, cfg.StripeWebhookSecret, cfg.StripePricePremiumMonthly)
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
-	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	pipelineCoachService := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo, coachSuggestionRepo)
 	interviewPracticeService := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistService := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 	linkedInScanService := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)
@@ -153,6 +154,7 @@ func runLocalServer() {
 	interviewRepo := dynamodb.NewInterviewRepository(dynamoClient)
 	linkedInScanRepo := dynamodb.NewLinkedInScanRepository(dynamoClient)
 	linkedInPostRepo := dynamodb.NewLinkedInPostRepository(dynamoClient)
+	coachSuggestionRepo := dynamodb.NewCoachSuggestionRepository(dynamoClient)
 	cognitoClient := cognito.NewAuthProvider(awsCfg, cfg.CognitoUserPoolID, cfg.CognitoClientID)
 	stripeClient := stripe.NewPaymentGateway(cfg.StripeSecretKey, cfg.WebAppBaseURL)
 	aiClient := openai.NewAIService(cfg.OpenAIKey, cfg.OpenAIDefaultModel)
@@ -184,7 +186,7 @@ func runLocalServer() {
 	)
 
 	resumeService := appservice.NewResumeOptimizerService(resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo, queuePublisher, jobRepo, fcmNotifier)
-	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo)
+	pipelineCoachSvc := appservice.NewPipelineCoachService(pipelineRepo, aiClient, subscriptionRepo, creditTransactionRepo, coachSuggestionRepo)
 	interviewPracticeSvc := appservice.NewInterviewPracticeService(pipelineRepo, interviewRepo, resumeRepo, aiClient, subscriptionRepo, creditTransactionRepo)
 	applyAssistSvc := appservice.NewApplyAssistService(resumeRepo, subscriptionRepo, aiClient)
 	linkedInScanSvc := appservice.NewLinkedInScanService(linkedInScanRepo, aiClient)

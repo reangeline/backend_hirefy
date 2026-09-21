@@ -68,6 +68,7 @@ type draftPostRequestDTO struct {
 	ResumeID string `json:"resume_id" validate:"required"`
 	Title    string `json:"title" validate:"required"`
 	Angle    string `json:"angle" validate:"required"`
+	Index    int    `json:"index"`
 }
 
 // DraftPost rascunha um post pronto pro tema escolhido — não persiste nada.
@@ -89,6 +90,7 @@ func (h *LinkedInPostHandler) DraftPost(w http.ResponseWriter, r *http.Request) 
 		ResumeID:   req.ResumeID,
 		TopicTitle: req.Title,
 		TopicAngle: req.Angle,
+		TopicIndex: req.Index,
 	})
 	if err != nil {
 		respondLinkedInPostError(w, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/reangeline/backend_applywise/internal/core/domain"
 	"github.com/reangeline/backend_applywise/internal/core/ports/inbound"
@@ -16,6 +17,7 @@ type pipelineCoachServiceImpl struct {
 	aiService    outbound.AIService
 	subRepo      outbound.SubscriptionRepository
 	creditRepo   outbound.CreditTransactionRepository
+	coachRepo    outbound.CoachSuggestionRepository
 }
 
 func NewPipelineCoachService(
@@ -23,12 +25,14 @@ func NewPipelineCoachService(
 	aiService outbound.AIService,
 	subRepo outbound.SubscriptionRepository,
 	creditRepo outbound.CreditTransactionRepository,
+	coachRepo outbound.CoachSuggestionRepository,
 ) inbound.PipelineCoachService {
 	return &pipelineCoachServiceImpl{
 		pipelineRepo: pipelineRepo,
 		aiService:    aiService,
 		subRepo:      subRepo,
 		creditRepo:   creditRepo,
+		coachRepo:    coachRepo,
 	}
 }
 
@@ -36,6 +40,14 @@ func (s *pipelineCoachServiceImpl) Coach(ctx context.Context, req inbound.CoachJ
 	// Wishlist has no AI action
 	if strings.EqualFold(req.Stage, string(domain.StageWishlist)) {
 		return nil, domain.ErrForbidden
+	}
+
+	// Reaproveita a sugestão já gerada pra esse (job, stage) em vez de gastar crédito/chamar
+	// a IA de novo, a menos que o usuário peça explicitamente pra regenerar.
+	if !req.ForceRegenerate {
+		if cached, err := s.coachRepo.Get(ctx, req.UserID, req.JobID, domain.PipelineJobStage(req.Stage)); err == nil {
+			return &inbound.CoachJobResponse{Content: cached.Content, Stage: req.Stage, Type: cached.Type}, nil
+		}
 	}
 
 	// Fetch the pipeline job to merge persisted data
@@ -143,9 +155,30 @@ func (s *pipelineCoachServiceImpl) Coach(ctx context.Context, req inbound.CoachJ
 		}
 	}
 
+	// Salva o resultado — próxima visita a essa aba lê daqui em vez de gerar de novo.
+	now := time.Now()
+	_ = s.coachRepo.Upsert(ctx, &domain.CoachSuggestion{
+		UserID:    req.UserID,
+		JobID:     req.JobID,
+		Stage:     domain.PipelineJobStage(req.Stage),
+		Content:   result.Content,
+		Type:      result.Type,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
 	return &inbound.CoachJobResponse{
 		Content: result.Content,
 		Stage:   req.Stage,
 		Type:    result.Type,
 	}, nil
+}
+
+// GetCachedCoach só lê a sugestão já salva — nunca chama a IA nem cobra crédito.
+func (s *pipelineCoachServiceImpl) GetCachedCoach(ctx context.Context, userID, jobID, stage string) (*inbound.CoachJobResponse, error) {
+	cached, err := s.coachRepo.Get(ctx, userID, jobID, domain.PipelineJobStage(stage))
+	if err != nil {
+		return nil, err
+	}
+	return &inbound.CoachJobResponse{Content: cached.Content, Stage: stage, Type: cached.Type}, nil
 }

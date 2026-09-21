@@ -28,6 +28,7 @@ const linkedInPostIdeasSK = "LINKEDINPOSTIDEAS"
 type LinkedInPostTopicItem struct {
 	Title string `dynamodbav:"title"`
 	Angle string `dynamodbav:"angle"`
+	Draft string `dynamodbav:"draft"`
 }
 
 type LinkedInPostIdeasItem struct {
@@ -44,7 +45,7 @@ type LinkedInPostIdeasItem struct {
 func (r *linkedInPostRepositoryImpl) Upsert(ctx context.Context, ideas *domain.LinkedInPostIdeas) error {
 	topics := make([]LinkedInPostTopicItem, 0, len(ideas.Topics))
 	for _, t := range ideas.Topics {
-		topics = append(topics, LinkedInPostTopicItem{Title: t.Title, Angle: t.Angle})
+		topics = append(topics, LinkedInPostTopicItem{Title: t.Title, Angle: t.Angle, Draft: t.Draft})
 	}
 
 	item := LinkedInPostIdeasItem{
@@ -107,7 +108,7 @@ func itemToLinkedInPostIdeas(item *LinkedInPostIdeasItem) (*domain.LinkedInPostI
 
 	topics := make([]domain.LinkedInPostTopic, 0, len(item.Topics))
 	for _, t := range item.Topics {
-		topics = append(topics, domain.LinkedInPostTopic{Title: t.Title, Angle: t.Angle})
+		topics = append(topics, domain.LinkedInPostTopic{Title: t.Title, Angle: t.Angle, Draft: t.Draft})
 	}
 
 	return &domain.LinkedInPostIdeas{

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -109,6 +110,19 @@ func (s *linkedInPostServiceImpl) DraftPost(ctx context.Context, req inbound.Dra
 	})
 	if err != nil {
 		return nil, fmt.Errorf("AI post draft failed: %w", err)
+	}
+
+	// Salva o rascunho no tema correspondente — próxima visita/troca de tema lê daqui em
+	// vez de gerar de novo. Falha silenciosa (loga, não bloqueia a resposta): o usuário já
+	// tem o texto gerado na tela mesmo se a persistência falhar.
+	if ideas, err := s.postIdeasRepo.GetByUserID(ctx, req.UserID); err == nil &&
+		req.TopicIndex >= 0 && req.TopicIndex < len(ideas.Topics) &&
+		ideas.Topics[req.TopicIndex].Title == req.TopicTitle {
+		ideas.Topics[req.TopicIndex].Draft = result.PostText
+		ideas.UpdatedAt = time.Now().UTC()
+		if err := s.postIdeasRepo.Upsert(ctx, ideas); err != nil {
+			log.Printf("[linkedin-post] failed to persist draft: userID=%s topicIndex=%d err=%v", req.UserID, req.TopicIndex, err)
+		}
 	}
 
 	return &inbound.DraftPostResult{PostText: result.PostText}, nil
